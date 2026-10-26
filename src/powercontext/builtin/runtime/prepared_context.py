@@ -17,9 +17,12 @@
 from __future__ import annotations
 
 import json
+import math
+import re
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from itertools import chain
+from itertools import chain, pairwise
 from typing import TypeVar
 
 from powercontext.artifacts import ArtifactAddress, ArtifactRef
@@ -43,9 +46,96 @@ from powercontext.builtin.runtime.prepared_text import (
 from powercontext.builtin.runtime.recall_sufficiency import RecallBudgetView
 
 _MIN_TRUNCATED_CONTENT_BYTES = 64
+_MIN_FRAGMENT_CHARS = 24
 _ELLIPSIS = "…"
 _BEGIN_MARKER = "BEGIN_POWERCONTEXT_PREPARED_CONTEXT_V1"
 _END_MARKER = "END_POWERCONTEXT_PREPARED_CONTEXT_V1"
+_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+_SENTENCE_BOUNDARY = re.compile(r"[.!?]+(?=\s|$)|\n+")
+_STOPWORDS = frozenset([
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "of",
+    "to",
+    "in",
+    "for",
+    "on",
+    "with",
+    "by",
+    "from",
+    "as",
+    "at",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "that",
+    "this",
+    "these",
+    "those",
+    "it",
+    "its",
+    "their",
+    "our",
+    "your",
+    "his",
+    "her",
+    "they",
+    "we",
+    "you",
+    "i",
+    "not",
+    "no",
+    "do",
+    "does",
+    "did",
+    "has",
+    "have",
+    "had",
+    "can",
+    "could",
+    "may",
+    "might",
+    "will",
+    "would",
+    "should",
+    "about",
+    "into",
+    "over",
+    "under",
+    "between",
+    "during",
+    "before",
+    "after",
+    "than",
+    "then",
+    "so",
+    "such",
+    "more",
+    "most",
+    "very",
+    "much",
+    "many",
+    "any",
+    "all",
+    "each",
+    "both",
+    "either",
+    "neither",
+    "other",
+    "another",
+    "same",
+    "own",
+    "only",
+    "just",
+    "also",
+])
 _Item = TypeVar("_Item")
 
 
@@ -72,6 +162,18 @@ class _EntryFit:
     entry: _PreparedContextEntry | None = None
     dropped_below_min_bytes: bool = False
     dropped_no_fitting_truncation: bool = False
+
+
+@dataclass(frozen=True)
+class _FragmentCandidate:
+    """One possible literal slice before the byte budget is applied."""
+
+    address: MemoryEntryAddress
+    start: int
+    end: int
+    text: str
+    score: float
+    trim: bool = True
 
 
 @dataclass(frozen=True)
@@ -106,6 +208,17 @@ class PreparedContextBuild:
     origins: tuple[PreparedContextOrigin, ...]
     omissions: PreparedContextOmissions = PreparedContextOmissions()
     code_origins: tuple[CodeEvidenceRef, ...] = ()
+    fragments: tuple[PreparedFragment, ...] = ()
+
+
+@dataclass(frozen=True)
+class PreparedFragment:
+    """One literal slice of a Memory entry selected for the current query."""
+
+    address: MemoryEntryAddress
+    start: int
+    end: int
+    text: str
 
 
 @dataclass(frozen=True)
@@ -211,6 +324,10 @@ class PreparedContextBuilder:
         profile_candidates: Sequence[PreparedProfileCandidate] = (),
         code_candidates: Sequence[PreparedCodeCandidate] = (),
     ) -> PreparedContextBuild:
+        if request.evidence_selection:
+            if sum(len(candidates.hits) for candidates in memory_candidates) > self.memory_candidate_limit:
+                raise PreparedContextInvariantError("memory-candidate-limit")
+            return self._build_fragment_result(request=request, memory_candidates=memory_candidates)
         if request.include_code:
 
             def historical(history_request: PrepareContextRequest, entries: int) -> PreparedContextBuild:
@@ -256,6 +373,303 @@ class PreparedContextBuilder:
             omissions=omissions,
         )
 
+    def _build_fragment_result(
+        self,
+        *,
+        request: PrepareContextRequest,
+        memory_candidates: Sequence[PreparedMemoryCandidates],
+    ) -> PreparedContextBuild:
+        fragments = self._select_fragments(request=request, memory_candidates=memory_candidates)
+        if not fragments:
+            return PreparedContextBuild(context=self.empty(), origins=(), fragments=())
+        content = _render_fragments(fragments)
+        content_bytes = len(content.encode("utf-8"))
+        if content_bytes > request.max_bytes:
+            return PreparedContextBuild(context=self.empty(), origins=(), fragments=())
+        return PreparedContextBuild(
+            context=PreparedContext(status="ready", content=content, content_bytes=content_bytes),
+            origins=tuple(fragment.address for fragment in fragments),
+            fragments=fragments,
+        )
+
+    def _select_fragments(  # noqa: C901 - one scored candidate pass and one budget pass
+        self,
+        *,
+        request: PrepareContextRequest,
+        memory_candidates: Sequence[PreparedMemoryCandidates],
+    ) -> tuple[PreparedFragment, ...]:
+        entries: list[tuple[MemoryEntryAddress, str]] = []
+        seen_entries: set[tuple[str, str, int, str, str]] = set()
+        for candidates in memory_candidates:
+            if candidates.hits and candidates.memory_ref is None:
+                raise PreparedContextInvariantError("memory-ref-missing")
+            for hit in candidates.hits:
+                if hit.memory_ref != candidates.memory_ref:
+                    raise PreparedContextInvariantError("memory-ref-mismatch")
+                if not hit.entry_id.strip() or not hit.entry_version_id.strip() or not hit.text.strip():
+                    continue
+                memory = ArtifactAddress(scope_id=candidates.scope_id, artifact=hit.memory_ref)
+                identity = (
+                    memory.scope_id,
+                    hit.memory_ref.artifact_id,
+                    hit.memory_ref.revision,
+                    hit.entry_id,
+                    hit.entry_version_id,
+                )
+                if identity in seen_entries:
+                    continue
+                seen_entries.add(identity)
+                address = MemoryEntryAddress(
+                    memory=memory,
+                    entry_id=hit.entry_id,
+                    entry_version_id=hit.entry_version_id,
+                )
+                entries.append((address, hit.text))
+        if not entries:
+            return ()
+
+        query_tokens = _TOKEN_PATTERN.findall(request.query.lower())
+        content_terms = [term for term in dict.fromkeys(query_tokens) if term not in _STOPWORDS]
+        if not content_terms:
+            content_terms = list(dict.fromkeys(query_tokens))
+        sentence_rows: list[tuple[MemoryEntryAddress, str, int, int, tuple[str, ...]]] = []
+        for address, text in entries:
+            for start, end in _sentence_spans(text):
+                tokens = tuple(_TOKEN_PATTERN.findall(text[start:end].lower()))
+                if tokens:
+                    sentence_rows.append((address, text, start, end, tokens))
+        if not sentence_rows:
+            return ()
+
+        document_frequency = Counter()
+        for _address, _text, _start, _end, tokens in sentence_rows:
+            document_frequency.update({_stem(token) for token in tokens})
+        content_stems = {term: _stem(term) for term in content_terms}
+        idf = {
+            _stem(term): math.log((len(sentence_rows) + 1) / (document_frequency.get(_stem(term), 0) + 0.5)) + 1.0
+            for term in set(query_tokens)
+        }
+        query_bigrams = tuple(dict.fromkeys(pairwise(query_tokens)))
+        stem_bigrams = tuple(
+            dict.fromkeys(
+                (content_stems.get(left, _stem(left)), content_stems.get(right, _stem(right)))
+                for left, right in query_bigrams
+            )
+        )
+        normalized_query = " ".join(query_tokens)
+
+        candidates: list[_FragmentCandidate] = []
+        by_entry: dict[tuple[str, str, int, str, str], list[tuple[int, int, str, float, MemoryEntryAddress]]] = {}
+        sentence_counts = Counter(_address_key(address) for address, _text, _start, _end, _tokens in sentence_rows)
+        for address, text, start, end, tokens in sentence_rows:
+            score = _sentence_score(
+                tokens,
+                content_terms,
+                content_stems,
+                idf,
+                query_bigrams,
+                stem_bigrams,
+                normalized_query,
+            )
+            if start == 0 and sentence_counts[_address_key(address)] > 1:
+                score *= 0.2
+            if score > 0:
+                candidates.append(
+                    _FragmentCandidate(address=address, start=start, end=end, text=text[start:end], score=score)
+                )
+            key = _address_key(address)
+            by_entry.setdefault(key, []).append((start, end, text, score, address))
+        for rows in by_entry.values():
+            rows.sort(key=lambda row: row[0])
+            for width in (2, 3):
+                for index in range(len(rows) - width + 1):
+                    subset = rows[index : index + width]
+                    window_score = sum(row[3] for row in subset) * (0.9 if width == 2 else 0.8)
+                    if window_score <= 0:
+                        continue
+                    first, last = subset[0], subset[-1]
+                    candidates.append(
+                        _FragmentCandidate(
+                            address=first[4],
+                            start=first[0],
+                            end=last[1],
+                            text=first[2][first[0] : last[1]],
+                            score=window_score,
+                            trim=False,
+                        )
+                    )
+            if rows:
+                entry_score = sum(row[3] for row in rows) * 0.75
+                if entry_score > 0:
+                    candidates.append(
+                        _FragmentCandidate(
+                            address=rows[0][4],
+                            start=rows[0][0],
+                            end=rows[-1][1],
+                            text=rows[0][2][rows[0][0] : rows[-1][1]],
+                            score=entry_score,
+                            trim=False,
+                        )
+                    )
+
+        unique: dict[tuple[str, str, int, str, str, int, int], _FragmentCandidate] = {}
+        for candidate in candidates:
+            key = (*_address_key(candidate.address), candidate.start, candidate.end)
+            previous = unique.get(key)
+            if previous is None or candidate.score > previous.score:
+                unique[key] = candidate
+        ranked = sorted(unique.values(), key=lambda candidate: (-candidate.score, candidate.end - candidate.start))
+        fragments: list[PreparedFragment] = []
+        for candidate in ranked:
+            if any(
+                fragment.address == candidate.address
+                and candidate.start < fragment.end
+                and fragment.start < candidate.end
+                for fragment in fragments
+            ):
+                continue
+            fragment = self._fit_candidate(candidate, fragments, request.max_bytes)
+            if fragment is not None:
+                fragments.append(fragment)
+        if fragments:
+            return self._merge_fragments(
+                self._expand_fragments(fragments, by_entry, request.max_bytes),
+                by_entry,
+                request.max_bytes,
+            )
+
+        # No query term matched any candidate: still deliver a literal prefix when it fits.
+        address, text = entries[0]
+        spans = _sentence_spans(text)
+        start, end = spans[0] if spans else (0, len(text))
+        fallback = _FragmentCandidate(address=address, start=start, end=end, text=text[start:end], score=0.0)
+        fitted = self._fit_candidate(fallback, (), request.max_bytes)
+        return () if fitted is None else (fitted,)
+
+    def _expand_fragments(
+        self,
+        fragments: Sequence[PreparedFragment],
+        by_entry: dict[tuple[str, str, int, str, str], list[tuple[int, int, str, float, MemoryEntryAddress]]],
+        max_bytes: int,
+    ) -> tuple[PreparedFragment, ...]:
+        expanded = list(fragments)
+        changed = True
+        while changed:
+            changed = False
+            for index, fragment in enumerate(expanded):
+                rows = by_entry.get(_address_key(fragment.address))
+                if not rows:
+                    continue
+                rows = sorted(rows, key=lambda row: row[0])
+                text = rows[0][2]
+                successors = [
+                    row for row in rows if fragment.end <= row[0] <= fragment.end + 2 and row[1] > fragment.end
+                ]
+                if successors:
+                    row = successors[0]
+                    if not any(
+                        other is not fragment
+                        and other.address == fragment.address
+                        and other.start < row[1]
+                        and row[0] < other.end
+                        for other in expanded
+                    ):
+                        attempt = PreparedFragment(
+                            address=fragment.address,
+                            start=fragment.start,
+                            end=row[1],
+                            text=text[fragment.start : row[1]],
+                        )
+                        trial = list(expanded)
+                        trial[index] = attempt
+                        if _fragments_bytes(trial) <= max_bytes:
+                            expanded[index] = attempt
+                            fragment = attempt
+                            changed = True
+                predecessors = [
+                    row for row in rows if fragment.start - 2 <= row[1] <= fragment.start and row[0] < fragment.start
+                ]
+                if predecessors:
+                    row = predecessors[-1]
+                    if not any(
+                        other is not fragment
+                        and other.address == fragment.address
+                        and other.start < fragment.end
+                        and row[0] < other.end
+                        for other in expanded
+                    ):
+                        attempt = PreparedFragment(
+                            address=fragment.address,
+                            start=row[0],
+                            end=fragment.end,
+                            text=text[row[0] : fragment.end],
+                        )
+                        trial = list(expanded)
+                        trial[index] = attempt
+                        if _fragments_bytes(trial) <= max_bytes:
+                            expanded[index] = attempt
+                            changed = True
+        return tuple(expanded)
+
+    def _merge_fragments(
+        self,
+        fragments: Sequence[PreparedFragment],
+        by_entry: dict[tuple[str, str, int, str, str], list[tuple[int, int, str, float, MemoryEntryAddress]]],
+        max_bytes: int,
+    ) -> tuple[PreparedFragment, ...]:
+        groups: dict[tuple[str, str, int, str, str], list[PreparedFragment]] = {}
+        for fragment in fragments:
+            groups.setdefault(_address_key(fragment.address), []).append(fragment)
+        merged = list(fragments)
+        for group in groups.values():
+            if len(group) < 2:
+                continue
+            rows = by_entry.get(_address_key(group[0].address))
+            if not rows:
+                continue
+            text = rows[0][2]
+            start = min(fragment.start for fragment in group)
+            end = max(fragment.end for fragment in group)
+            replacement = PreparedFragment(address=group[0].address, start=start, end=end, text=text[start:end])
+            trial = [fragment for fragment in merged if fragment not in group]
+            trial.append(replacement)
+            if _fragments_bytes(trial) <= max_bytes:
+                merged = trial
+        return tuple(merged)
+
+    def _fit_candidate(
+        self,
+        candidate: _FragmentCandidate,
+        fragments: Sequence[PreparedFragment],
+        max_bytes: int,
+    ) -> PreparedFragment | None:
+        full = PreparedFragment(
+            address=candidate.address,
+            start=candidate.start,
+            end=candidate.end,
+            text=candidate.text,
+        )
+        if _fragments_bytes((*fragments, full)) <= max_bytes:
+            return full
+        if not candidate.trim:
+            return None
+        lower = candidate.start + _MIN_FRAGMENT_CHARS
+        upper = candidate.end
+        best: PreparedFragment | None = None
+        while lower <= upper:
+            end = (lower + upper) // 2
+            text = candidate.text[: end - candidate.start]
+            if len(text.strip()) < _MIN_FRAGMENT_CHARS:
+                lower = end + 1
+                continue
+            attempt = PreparedFragment(address=candidate.address, start=candidate.start, end=end, text=text)
+            if _fragments_bytes((*fragments, attempt)) <= max_bytes:
+                best = attempt
+                lower = end + 1
+            else:
+                upper = end - 1
+        return best
+
     def probe_budget(
         self,
         *,
@@ -277,6 +691,17 @@ class PreparedContextBuilder:
         counters because both go through :meth:`_select_entries`.
         """
 
+        if request.evidence_selection:
+            fragments = self._select_fragments(request=request, memory_candidates=memory_candidates)
+            selected = _render_fragments(fragments) if fragments else None
+            content_bytes = 0 if selected is None else len(selected.encode("utf-8"))
+            return RecallBudgetView(
+                max_bytes=request.max_bytes,
+                delivered_items=len(fragments),
+                truncated_items=0,
+                dropped_items=0,
+                unused_bytes=max(0, request.max_bytes - content_bytes),
+            )
         content, origins, omissions = self._select_entries(
             request=request,
             current_scope_id=current_scope_id,
@@ -658,6 +1083,151 @@ class PreparedContextBuilder:
         if best is None:
             return _EntryFit(dropped_no_fitting_truncation=True)
         return _EntryFit(entry=best)
+
+
+def _sentence_spans(text: str) -> tuple[tuple[int, int], ...]:
+    spans: list[tuple[int, int]] = []
+    start = 0
+    for match in _SENTENCE_BOUNDARY.finditer(text):
+        spans.append((start, match.end()))
+        start = match.end()
+    if start < len(text):
+        spans.append((start, len(text)))
+    result: list[tuple[int, int]] = []
+    for raw_start, raw_end in spans:
+        segment = text[raw_start:raw_end]
+        leading = len(segment) - len(segment.lstrip())
+        trailing = len(segment) - len(segment.rstrip())
+        begin = raw_start + leading
+        end = raw_end - trailing
+        if begin < end and text[begin:end].strip():
+            result.append((begin, end))
+    return tuple(result)
+
+
+_STEM_SUFFIXES = (
+    "ational",
+    "ization",
+    "izations",
+    "ities",
+    "ivity",
+    "iveness",
+    "ments",
+    "ment",
+    "ness",
+    "ingly",
+    "edly",
+    "ing",
+    "ed",
+    "ies",
+    "ive",
+    "ions",
+    "ion",
+    "ally",
+    "al",
+    "ics",
+    "ic",
+    "s",
+)
+
+
+def _stem(token: str) -> str:
+    for suffix in _STEM_SUFFIXES:
+        if not token.endswith(suffix):
+            continue
+        if suffix == "s" and token.endswith(("sis", "us", "is")):
+            continue
+        base = token[: -len(suffix)]
+        if len(base) < 4:
+            continue
+        return f"{base}y" if suffix == "ies" else base
+    return token
+
+
+def _sentence_score(
+    tokens: Sequence[str],
+    content_terms: Sequence[str],
+    content_stems: dict[str, str],
+    idf: dict[str, float],
+    query_bigrams: Sequence[tuple[str, str]],
+    stem_bigrams: Sequence[tuple[str, str]],
+    normalized_query: str,
+) -> float:
+    stems = Counter(_stem(token) for token in tokens)
+    normalized = " ".join(tokens)
+    normalized_stems = " ".join(_stem(token) for token in tokens)
+    score = 0.0
+    for term in content_terms:
+        stem = content_stems.get(term, _stem(term))
+        frequency = stems.get(stem, 0)
+        if frequency:
+            score += idf.get(stem, 1.0) * (1.0 + math.log(frequency))
+    for left, right in query_bigrams:
+        if f"{left} {right}" in normalized:
+            score += 0.75 * (idf.get(_stem(left), 1.0) + idf.get(_stem(right), 1.0))
+    for left, right in stem_bigrams:
+        if f"{left} {right}" in normalized_stems:
+            score += 0.5 * (idf.get(left, 1.0) + idf.get(right, 1.0))
+    if normalized_query and normalized_query in normalized:
+        score += 2.0
+    result_cues = sum(
+        token
+        in {
+            "conclusion",
+            "conclusions",
+            "result",
+            "results",
+            "significant",
+            "respectively",
+            "associated",
+            "association",
+        }
+        for token in tokens
+    )
+    score += 0.4 * result_cues
+    score += 0.35 * sum(token.isdigit() for token in tokens)
+    for term in content_terms:
+        if term.isdigit() and stems.get(term, 0):
+            score += 1.5
+    return score / (1.0 + 0.1 * math.log(1.0 + len(tokens)))
+
+
+def _address_key(address: MemoryEntryAddress) -> tuple[str, str, int, str, str]:
+    return (
+        address.memory.scope_id,
+        address.memory.artifact.artifact_id,
+        address.memory.artifact.revision,
+        address.entry_id,
+        address.entry_version_id,
+    )
+
+
+def _fragment_item(fragment: PreparedFragment) -> dict[str, object]:
+    memory = fragment.address.memory
+    return {
+        "citation": {
+            "scope_id": memory.scope_id,
+            "memory_ref": memory.artifact.model_dump(mode="json"),
+            "entry_id": fragment.address.entry_id,
+            "entry_version_id": fragment.address.entry_version_id,
+        },
+        "content": fragment.text,
+        "start": fragment.start,
+        "end": fragment.end,
+    }
+
+
+def _render_fragments(fragments: Sequence[PreparedFragment]) -> str:
+    envelope = {
+        "trust": "untrusted_history",
+        "items": [_fragment_item(fragment) for fragment in fragments],
+    }
+    encoded = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+    return "\n\n".join((TRUST_POLICY, f"{_BEGIN_MARKER}\n{encoded}\n{_END_MARKER}"))
+
+
+def _fragments_bytes(fragments: Sequence[PreparedFragment]) -> int:
+    return len(_render_fragments(fragments).encode("utf-8"))
 
 
 def _interleave(

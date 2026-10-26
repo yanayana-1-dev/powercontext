@@ -1,12 +1,12 @@
 # zzd 分支开发说明
 
-本目录记录 `zzd` 分支针对 2026 PowerContext 大赛赛题二至九的设计与验证过程。
+本目录记录 `zzd` 分支针对 2026 PowerContext 大赛赛题二至十的设计与验证过程。
 
 ## 分支基线
 
 - 基线：PowerContext v1.2.0，commit `9db1753434162c0aa7c9f1189a1722e617880a52`
 - 分支：`zzd`
-- 实现范围：在保留基线公共接口与兼容行为的前提下，新增各赛题能力；核心改动集中在 Source、Runtime、Memory/Inference 与 Topic 检索的扩展点
+- 实现范围：在保留基线公共接口与兼容行为的前提下，新增各赛题能力；核心改动集中在 Source、Runtime、Memory/Inference、Topic 检索与 Context 组装的扩展点
 
 ## 已实现赛题
 
@@ -20,6 +20,7 @@
 | 赛题七 | `processing-01-count-trigger` | `src/powercontext/builtin/runtime/artifact_processing.py` | [processing-01-count-trigger.md](processing-01-count-trigger.md) |
 | 赛题八 | `memory-02-embedding-batches` | `src/powercontext/builtin/inference/coalescing.py` | [memory-02-embedding-batches.md](memory-02-embedding-batches.md) |
 | 赛题九 | `memory-01-source-lifecycle` | `src/powercontext/builtin/runtime/source_lifecycle.py` | [memory-01-source-lifecycle.md](memory-01-source-lifecycle.md) |
+| 赛题十 | `context-01-evidence-selection` | `src/powercontext/builtin/runtime/prepared_context.py` | [context-01-evidence-selection.md](context-01-evidence-selection.md) |
 
 ## 交付内容
 
@@ -35,7 +36,9 @@
 - `src/powercontext/builtin/runtime/source_lifecycle.py`：来源依赖 DAG、事件版本/序号、all/any 传播、generation/audit
 - `src/powercontext/builtin/persistence/tables.py`：`pc_source_lifecycle` 生命周期持久化表
 - `src/powercontext/builtin/persistence/topic_memory.py`：Topic 搜索按生命周期状态过滤
-- `tests/`：八道题的产品侧回归测试
+- `src/powercontext/builtin/runtime/prepared_context.py`：查询驱动的原文片段选择、精确区间/引用与完整 UTF-8 预算
+- `src/powercontext/builtin/runtime/models.py`：`PrepareContextRequest.evidence_selection`
+- `tests/`：九道题的产品侧回归测试
 - `docs/zzd/`：实现与验证记录
 
 ## 验证结果
@@ -50,6 +53,7 @@
 | 官方公开自测 `processing-01-count-trigger` | 17 passed（本地 Windows 需放大 worker 超时；原配置见说明） |
 | 官方公开自测 `memory-02-embedding-batches` | 8 passed |
 | 官方公开自测 `memory-01-source-lifecycle` | 4 passed |
+| 官方公开自测 `context-01-evidence-selection` | 3 passed |
 | 产品回归测试 `tests/test_csv_rows.py` | 16 passed |
 | 产品回归测试 `tests/test_pi_session.py` | 17 passed |
 | 产品回归测试 `tests/test_pdf_pages.py` | 7 passed |
@@ -58,6 +62,7 @@
 | 产品回归测试 `tests/test_count_trigger.py` | 15 passed |
 | 产品回归测试 `tests/test_coalescing.py` | 7 passed |
 | 产品回归测试 `tests/test_source_lifecycle.py` | 5 passed |
+| 产品回归测试 `tests/test_evidence_selection.py` | 5 passed |
 | 既有 Source 测试 `tests/test_sources.py`、`tests/test_source_observations.py` | 12 passed |
 | `ruff check` / `ruff format --check` | 通过 |
 
@@ -71,3 +76,4 @@
 - 赛题七：严格正整数/默认关闭、重复 capture 不计数、Memory 单窗与剩余数量重判、Topic wave、scope/family 隔离、时间条件 OR、显式 flush、receipt 信任升级、lineage-only Source 计数与排除、重启恢复与写入失败重试。
 - 赛题八：并发去重与原始顺序、batch 上限、空输入、LRU 与缓存关闭、晚到调用共享执行中批次、失败不缓存/可重试、取消隔离、usage 与 token 汇总、向量数量校验、原生向量索引，以及 6 scope / 24 文本 / 4 次底层请求预算与缓存查询。
 - 赛题九：20 节点多层 all/any DAG、撤回/恢复传播、原生 Memory 列表/搜索/Context、Topic 搜索/Context、精确历史引用、generation/audit、事件版本与序号、重放无新 Memory 修订、中断后重试、重启与 scope 隔离。
+- 赛题十：query 驱动的后部原文选择、精确字符区间与 citation/origins 对齐、完整 UTF-8 预算、Unicode、空候选、跨 scope 地址、默认 prepare 兼容；并用 SciFact 训练集 505 条 claim 做 1,400/1,800 bytes 离线质量自测，对抗性相似干扰下约为 0.75 evidence token recall / 0.54 完整覆盖。
