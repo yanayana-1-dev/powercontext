@@ -49,6 +49,7 @@ else:
 from powercontext._logging import log_safely
 from powercontext.builtin.persistence.database import AsyncDatabase
 from powercontext.builtin.persistence.errors import ArtifactProcessingLeadershipLostError
+from powercontext.builtin.persistence.processing import ArtifactProcessingPendingRepository
 from powercontext.builtin.persistence.processing_intents import ArtifactProcessingIntentRepository
 from powercontext.builtin.persistence.supervision import (
     ArtifactProcessingBindingStateRepository,
@@ -668,6 +669,47 @@ class ArtifactProcessingSupervisor:
         else:
             await self._discover_requested(state)
             await self._discover_automatic(state)
+        await self._discover_count(state)
+
+    async def _discover_count(self, state: _FamilyState) -> None:
+        """Re-check every scope whose pending journal count still reaches its threshold.
+
+        This is the count-admission counterpart of schedule discovery: after a worker
+        advances its cursor, remaining work that still meets the threshold continues
+        without new captures, a schedule tick, or a flush. It also re-drives scopes
+        whose processing failed or whose runtime restarted between admissions.
+        """
+
+        threshold = state.binding.count_threshold
+        if threshold is None:
+            return
+        if self._fresh_capacity(state) <= 0:
+            return
+        pending_repo = ArtifactProcessingPendingRepository()
+        after_sequence = 0
+        while True:
+            async with self._database.transaction() as connection:
+                await self._leases.require_fence(connection, self._require_current_fence())
+                rows = await self._intents.scan(
+                    connection,
+                    state.binding.binding_name,
+                    after_sequence=after_sequence,
+                    limit=_DISCOVERY_PAGE_SIZE,
+                )
+                for row in rows:
+                    after_sequence = row.pending_sequence
+                    scope = row.scope_id
+                    if scope in state.queued or scope in state.running or scope in state.retries:
+                        continue
+                    accepted = await pending_repo.request_flush_at_count(
+                        connection, scope, state.binding.binding_name, threshold
+                    )
+                    if accepted is None:
+                        continue
+                    await self._intents.request(connection, scope, state.binding.binding_name)
+                    self._enqueue(state, scope)
+            if len(rows) < _DISCOVERY_PAGE_SIZE:
+                break
 
     async def _discover_requested(self, state: _FamilyState) -> None:
         capacity = self._fresh_capacity(state)
