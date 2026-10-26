@@ -489,6 +489,7 @@ class ScopedSourceApplication:
                             span.set_attributes({_MEMORY_CAPTURE_SOURCE_COUNT: 1})
             except BaseValueConflictError as error:
                 raise SourceConflictError("identity", error.identity) from None
+            self._wake_processing()
             return SourceReceipt(
                 source_ref=SourceRef(source_type=record.source_type, source_id=record.source_id),
                 sequence=record.position,
@@ -505,7 +506,13 @@ class ScopedSourceApplication:
                 )
                 if span is not None:
                     span.set_attributes({_MEMORY_CAPTURE_SOURCE_COUNT: 1})
+            self._wake_processing()
             return SourceReceipt(source_ref=context.sources.catalog.as_ref(source), sequence=sequence)
+
+    def _wake_processing(self) -> None:
+        supervisor = self._runtime.artifact_processing_supervisor
+        if supervisor is not None:
+            supervisor.wake()
 
 
 class SourceApplication:
