@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini KB · 浏览器向量化 × seekdb 混合检索</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Mini KB <span class="sub">浏览器本地向量化 · seekdb 混合检索</span></h1>
+    <div class="badges">
+      <span id="badge-backend" class="badge" title="当前推理后端">后端：检测中…</span>
+      <span id="badge-model" class="badge">模型：未加载</span>
+      <span id="badge-db" class="badge">seekdb：检测中…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card" id="panel-model">
+      <h2>1 · 端侧模型</h2>
+      <div class="row">
+        <label>模型
+          <select id="sel-model">
+            <option value="Xenova/all-MiniLM-L6-v2" data-dim="384" data-pooling="mean">all-MiniLM-L6-v2 (384d, 英文)</option>
+            <option value="Xenova/bge-small-zh-v1.5" data-dim="512" data-pooling="cls">bge-small-zh-v1.5 (512d, 中文)</option>
+          </select>
+        </label>
+        <label>量化
+          <select id="sel-dtype">
+            <option value="q8" selected>INT8 (q8，WASM)</option>
+            <option value="fp16">FP16（WebGPU 首选）</option>
+            <option value="fp32">FP32 (无量化)</option>
+          </select>
+        </label>
+        <label>批大小
+          <select id="sel-batch">
+            <option value="1">1（逐条）</option>
+            <option value="8">8</option>
+            <option value="16" selected>16</option>
+            <option value="32">32</option>
+          </select>
+        </label>
+        <button id="btn-load" class="primary">加载模型</button>
+      </div>
+      <div class="progress"><div id="model-progress"></div></div>
+      <div id="model-meta" class="meta"></div>
+    </section>
+
+    <section class="card" id="panel-kb">
+      <h2>2 · 知识库（seekdb 集合）</h2>
+      <div class="row">
+        <select id="sel-collection"></select>
+        <input id="input-collection" placeholder="新集合名，如 notes" />
+        <button id="btn-create">创建</button>
+        <button id="btn-refresh">刷新索引</button>
+        <button id="btn-drop" class="danger">删除</button>
+      </div>
+      <div class="meta" id="kb-meta"></div>
+      <label class="check"><input type="checkbox" id="chk-auto-refresh" checked /> 导入完成后自动刷新索引（增量 HNSW 合并）</label>
+    </section>
+
+    <section class="card" id="panel-import">
+      <h2>3 · 导入文档（浏览器内向量化）</h2>
+      <textarea id="ta-docs" rows="8" placeholder="粘贴文本，空行分段；每段作为一个文档。也可选择 .txt / .md 文件导入。"></textarea>
+      <div class="row">
+        <input type="file" id="file-docs" accept=".txt,.md,.csv" multiple />
+        <span id="import-stat" class="meta"></span>
+        <button id="btn-import" class="primary">向量化并写入 seekdb</button>
+      </div>
+    </section>
+
+    <section class="card" id="panel-search">
+      <h2>4 · 检索（seekdb 端内完成）</h2>
+      <div class="row">
+        <input id="input-query" placeholder="输入查询，回车或点击检索" />
+        <select id="sel-mode">
+          <option value="hybrid" selected>混合（全文过滤 + 向量排序）</option>
+          <option value="vector">纯向量</option>
+          <option value="fts">纯全文</option>
+        </select>
+        <select id="sel-limit">
+          <option>5</option><option selected>10</option><option>20</option>
+        </select>
+        <button id="btn-search" class="primary">检索</button>
+      </div>
+      <div id="search-stat" class="meta"></div>
+      <table id="result-table">
+        <thead><tr><th>#</th><th>通道</th><th>内容</th><th>L2 距离</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card" id="panel-perf">
+      <h2>5 · 性能与量化对比</h2>
+      <div class="row">
+        <button id="btn-batch-bench">批处理耗时对比（batch 1 vs 16）</button>
+        <button id="btn-latency-bench">检索延迟采样（20 次 p50）</button>
+        <button id="btn-quant-compare">量化对比（q8 vs fp32 质量/速度）</button>
+      </div>
+      <pre id="bench-output" class="bench"></pre>
+    </section>
+  </main>
+
+  <footer>
+    <div>推理发生在你的浏览器（WebGPU 优先，不支持时自动降级 WASM）；存储与混合检索由 seekdb 完成，禁止任何云端推理。</div>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

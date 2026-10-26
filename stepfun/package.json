@@ -1,0 +1,16 @@
+{
+  "name": "stepfun-seekdb-minikb",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-side embedding + seekdb hybrid search mini knowledge base (2026 OceanBase competition, StepFun track)",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.5"
+  },
+  "scripts": {
+    "start": "node server/server.mjs"
+  }
+}
