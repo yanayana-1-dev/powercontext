@@ -1,0 +1,74 @@
+[
+ {
+  "round": 1,
+  "q": "我叫墨鸦，我要在广场喷泉里洗个澡",
+  "conv": "eee295de-7299-4b8e-8e62-1cf6353dcb6c",
+  "a": "纪元4年春，雾未散。旅行者墨鸦径直走向中心喷泉广场，挽起袖子把脚伸进了泉水。周围霎时安静——随后是一整条街的抽气声。市政官格雷布·扳脸从市政厅的窗口探出半个身子，手里的《喷泉洁净条例》被捏出了褶皱。\n\n---\n📜 **【镇志 · 纪元4年】** 纪元4年：墨鸦擅入中心喷泉广场洗浴，市政官格雷布·扳脸当场开具罚单。\n（本条已由镇志官存入雾隐镇档案库 · 机密等级 4）",
+  "message_id": "2e545b58-5e11-4c86-ae82-009ed691e412",
+  "task_id": "39668ea7-dc2e-4da5-b43e-174c0a500be1",
+  "usage": {
+   "prompt_tokens": 1625,
+   "prompt_unit_price": "0",
+   "prompt_price_unit": "0",
+   "prompt_price": "0",
+   "completion_tokens": 393,
+   "completion_unit_price": "0",
+   "completion_price_unit": "0",
+   "completion_price": "0",
+   "total_tokens": 2018,
+   "total_price": "0",
+   "currency": "USD",
+   "latency": 54.834,
+   "time_to_first_token": 57.006,
+   "time_to_generate": 0.0
+  }
+ },
+ {
+  "round": 2,
+  "q": "我去当铺把上次洗喷泉用的肥皂卖掉",
+  "conv": "eee295de-7299-4b8e-8e62-1cf6353dcb6c",
+  "a": "纪元4年春，旅行者墨鸦来到中心喷泉广场当铺九进九出，将之前在喷泉里用过的肥皂卖掉。老板左手比尔称这是一枚有故事的纽扣，但最后还是按原价收了回去。市政官格雷布·扳脸得知此事后，从市政厅窗口探出半个身子，紧捏着《喷泉洁净条例》的手指微微颤抖。\n\n---\n📜 **【镇志 · 纪元4年】** 纪元4年：墨鸦擅入中心喷泉广场当铺九进九出卖掉肥皂，市政官格雷布·扳脸当场开具罚单。\n（本条已由镇志官存入雾隐镇档案库 · 机密等级 4）",
+  "message_id": "f987fba4-fd65-4f68-a51b-aecccbe17c16",
+  "task_id": "16f11020-6ee8-4d15-9fd6-9e7c345a6f77",
+  "usage": {
+   "prompt_tokens": 1625,
+   "prompt_unit_price": "0",
+   "prompt_price_unit": "0",
+   "prompt_price": "0",
+   "completion_tokens": 531,
+   "completion_unit_price": "0",
+   "completion_price_unit": "0",
+   "completion_price": "0",
+   "total_tokens": 2156,
+   "total_price": "0",
+   "currency": "USD",
+   "latency": 61.039,
+   "time_to_first_token": 62.962,
+   "time_to_generate": 0.0
+  }
+ },
+ {
+  "round": 3,
+  "q": "我想半夜去雾林里喊雾的名字",
+  "conv": "eee295de-7299-4b8e-8e62-1cf6353dcb6c",
+  "a": "纪元4年春，雾未散。旅行者墨鸦深夜前往北境雾林，试图唤来雾的名字。四周静默无语，只有月光和鸟鸣穿越浓雾。守墓人老乌鸦的坟前，他的名字被重新刻上。然而，当墨鸦返回中心喷泉广场时，市政官格雷布·扳脸已等在那里，手中的《喷泉洁净条例》紧握在手心。\n\n---\n📜 **【镇志 · 纪元4年】** 纪元4年：墨鸦深夜擅入北境雾林唤雾之名，被守墓人老乌鸦目视。\n（本条已由镇志官存入雾隐镇档案库 · 机密等级 3）",
+  "message_id": "0f7090cf-958f-4321-9325-6667862afcdf",
+  "task_id": "c4bd3bc4-75bf-43b2-9bd9-908991039975",
+  "usage": {
+   "prompt_tokens": 1625,
+   "prompt_unit_price": "0",
+   "prompt_price_unit": "0",
+   "prompt_price": "0",
+   "completion_tokens": 496,
+   "completion_unit_price": "0",
+   "completion_price_unit": "0",
+   "completion_price": "0",
+   "total_tokens": 2121,
+   "total_price": "0",
+   "currency": "USD",
+   "latency": 59.904,
+   "time_to_first_token": 61.921,
+   "time_to_generate": 0.0
+  }
+ }
+]

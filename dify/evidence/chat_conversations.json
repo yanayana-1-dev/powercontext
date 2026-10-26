@@ -1,0 +1,76 @@
+{
+ "page": 1,
+ "limit": 10,
+ "total": 2,
+ "has_more": false,
+ "data": [
+  {
+   "id": "9850e65e-0f84-4473-85d5-6fd504ccc496",
+   "status": "normal",
+   "from_source": "api",
+   "from_end_user_id": "93c40a1a-936d-433e-8d8a-5746e90813cf",
+   "from_end_user_session_id": "14491567-afe7-449e-bd32-c73c62f11f91",
+   "from_account_id": null,
+   "from_account_name": null,
+   "name": "我叫墨鸦，我要在广场喷泉里洗个澡",
+   "summary": "我叫墨鸦，我要在广场喷泉里洗个澡",
+   "read_at": null,
+   "created_at": 1793040371,
+   "updated_at": 1793040371,
+   "annotated": false,
+   "model_config": {
+    "model": null,
+    "pre_prompt": null
+   },
+   "message_count": 1,
+   "user_feedback_stats": {
+    "like": 0,
+    "dislike": 0
+   },
+   "admin_feedback_stats": {
+    "like": 0,
+    "dislike": 0
+   },
+   "status_count": {
+    "success": 1,
+    "failed": 0,
+    "partial_success": 0,
+    "paused": 0
+   }
+  },
+  {
+   "id": "eee295de-7299-4b8e-8e62-1cf6353dcb6c",
+   "status": "normal",
+   "from_source": "api",
+   "from_end_user_id": "9a061f49-be75-4c6e-8cc3-e5542bd32d19",
+   "from_end_user_session_id": "reviewer-demo",
+   "from_account_id": null,
+   "from_account_name": null,
+   "name": "我叫墨鸦，我要在广场喷泉里洗个澡",
+   "summary": "我叫墨鸦，我要在广场喷泉里洗个澡",
+   "read_at": null,
+   "created_at": 1793039843,
+   "updated_at": 1793039954,
+   "annotated": false,
+   "model_config": {
+    "model": null,
+    "pre_prompt": null
+   },
+   "message_count": 3,
+   "user_feedback_stats": {
+    "like": 0,
+    "dislike": 0
+   },
+   "admin_feedback_stats": {
+    "like": 0,
+    "dislike": 0
+   },
+   "status_count": {
+    "success": 3,
+    "failed": 0,
+    "partial_success": 0,
+    "paused": 0
+   }
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+id	year	location	actor	entry_type	importance	content
+24	4	中心喷泉广场	墨鸦	incident	3	纪元4年：墨鸦深夜擅入北境雾林唤雾之名，被守墓人老乌鸦目视。
+23	4	当铺九进九出	墨鸦	incident	4	纪元4年：墨鸦擅入中心喷泉广场当铺九进九出卖掉肥皂，市政官格雷布·扳脸当场开具罚单。
+22	4	中心喷泉广场	墨鸦	incident	4	纪元4年：墨鸦擅入中心喷泉广场洗浴，市政官格雷布·扳脸当场开具罚单。
+10	3	市政厅	市政官格雷布·扳脸	verdict	3	纪元3年末：市政厅第47号修正案在无声中通过，禁止在市政厅屋顶饲养山羊。此前无人申请过此项许可，此后也无人触犯。镇志官批
+9	3	当铺九进九出	左手比尔	rumor	2	纪元3年：有人在当铺看见小偷左手比尔当出一枚纽扣，三分钟后又原价赎回。老板事后评价：'有故事的纽扣，当不出好价钱。'比尔
+current_year
+4
+player_slug	player_name	scope_id	created_at
+21ed92a84f7c	墨鸦	scp_38rfdg5sqb91qwd2af37mazrd8	2026-10-27 01:47:25
+6538a5614277	阿雾	scp_4e0npqf7z23qwravag4kzg9nvh	2026-10-27 00:50:39
+devtest02	雾语	scp_21aajxqft7m1kavb220kbwhh95	2026-10-26 22:13:14
+conversation_id	player_slug	scope_id	created_at
+eee295de-7299-4b8e-8e62-1cf6353dcb6c	21ed92a84f7c	scp_38rfdg5sqb91qwd2af37mazrd8	2026-10-27 02:37:23

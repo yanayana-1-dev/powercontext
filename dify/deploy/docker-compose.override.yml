@@ -1,0 +1,14 @@
+# 雾隐镇编年史 · Dify 网络增强
+# 让 Dify 的 api / worker（执行 HTTP 节点）与 plugin-daemon（模型供应商连接）容器
+# 能通过 http://host.docker.internal:<port> 访问同机部署的 PowerContext、桥接服务与模型服务。
+# 用法：放到 dify/docker/docker-compose.override.yml，与 docker-compose.yaml 同目录即可，compose 自动合并。
+services:
+  api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  worker:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  plugin_daemon:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

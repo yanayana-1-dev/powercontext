@@ -1,0 +1,705 @@
+app:
+  description: 一个会记住你做过什么的雾隐镇文字冒险。seekdb 存世界档案、编年史与身份登记（向量+全文+结构化混合检索），PowerContext 存旅行者的个人记忆。
+  icon: 🌫️
+  icon_background: '#E0F2FE'
+  icon_type: emoji
+  mode: advanced-chat
+  name: 雾隐镇编年史
+  use_icon_as_answer_icon: false
+dependencies:
+- type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai_api_compatible/openai_api_compatible
+kind: app
+version: 0.7.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload: {}
+    opening_statement: '欢迎来到雾隐镇——一座终年被雾笼罩、怪事被写进条例的小镇。
+
+
+      第一次来，请先报名号：说一句「我叫XX」+你想做的事，镇志官就会为你建档。
+
+      你的每一个行动都会被写进《镇志》存入档案库，小镇会用历史回应你的每一次捣乱。
+
+
+      试试：「我叫阿雾，我想在广场喷泉里洗个澡」'
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: true
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - id: start-source-prepare
+      source: start
+      sourceHandle: source
+      target: prepare
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: prepare-source-identify
+      source: prepare
+      sourceHandle: source
+      target: identify
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: identify-source-extract_identity
+      source: identify
+      sourceHandle: source
+      target: extract_identity
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: identify-fail-branch-memory_search
+      source: identify
+      sourceHandle: fail-branch
+      target: memory_search
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: extract_identity-source-memory_search
+      source: extract_identity
+      sourceHandle: source
+      target: memory_search
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: memory_search-source-recall
+      source: memory_search
+      sourceHandle: source
+      target: recall
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: recall-source-build_context
+      source: recall
+      sourceHandle: source
+      target: build_context
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: build_context-source-llm
+      source: build_context
+      sourceHandle: source
+      target: llm
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: llm-source-parse
+      source: llm
+      sourceHandle: source
+      target: parse
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: parse-source-archive
+      source: parse
+      sourceHandle: source
+      target: archive
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: archive-source-remember
+      source: archive
+      sourceHandle: source
+      target: remember
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: archive-fail-branch-remember
+      source: archive
+      sourceHandle: fail-branch
+      target: remember
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: remember-source-answer
+      source: remember
+      sourceHandle: source
+      target: answer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    - id: remember-fail-branch-answer
+      source: remember
+      sourceHandle: fail-branch
+      target: answer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+      selected: false
+    nodes:
+    - id: start
+      type: custom
+      data:
+        type: start
+        title: 开始
+        desc: 旅行者的行动
+        variables: []
+      position:
+        x: 60
+        y: 300
+      positionAbsolute:
+        x: 60
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 116
+      zIndex: 0
+      isPrompty: false
+    - id: prepare
+      type: custom
+      data:
+        type: code
+        title: 清洗输入
+        desc: 清洗引号与换行，保证后续 HTTP JSON body 合法
+        code_language: python3
+        code: "def main(sys_query: str) -> dict:\n    q = (sys_query or \"\").strip()\n    clean = q.replace(\"\\\\\", \" \").replace('\"', \"'\").replace(\"\\r\", \" \").replace(\"\\n\", \" \")\n    return\
+          \ {\"clean_query\": clean[:600]}\n"
+        variables:
+        - variable: sys_query
+          value_selector:
+          - sys
+          - query
+        outputs:
+          clean_query:
+            type: string
+            children: null
+      position:
+        x: 320
+        y: 300
+      positionAbsolute:
+        x: 320
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 160
+      zIndex: 0
+      isPrompty: false
+    - id: identify
+      type: custom
+      data:
+        type: http-request
+        title: 识别身份
+        desc: seekdb mistvale_players/sessions：提取名号 → 查/建 PowerContext scope，绑定会话
+        method: post
+        url: http://host.docker.internal:9010/v1/chronicle/identify
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type: application/json'
+        params: ''
+        body:
+          type: json
+          data:
+          - key: ''
+            type: text
+            value: '{"text": "{{#prepare.clean_query#}}", "conversation_id": "{{#sys.conversation_id#}}"}'
+            file: []
+        timeout:
+          connect: 10
+          read: 180
+          write: 30
+        ssl_verify: false
+        error_strategy: fail-branch
+        retry_config:
+          max_retries: 2
+          retry_interval: 800
+          retry_enabled: true
+      position:
+        x: 580
+        y: 300
+      positionAbsolute:
+        x: 580
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 140
+      zIndex: 0
+      isPrompty: false
+    - id: extract_identity
+      type: custom
+      data:
+        type: code
+        title: 取出身份
+        desc: ''
+        code_language: python3
+        code: "import json\n\n\ndef main(identity_body: str) -> dict:\n    scope_id = \"\"\n    player_name = \"\"\n    try:\n        if identity_body:\n            d = json.loads(identity_body) or {}\n\
+          \            scope_id = str(d.get(\"scope_id\") or \"\")\n            player_name = str(d.get(\"player_name\") or \"\")\n    except Exception:\n        scope_id, player_name = \"\", \"\"\n   \
+          \ return {\"scope_id\": scope_id, \"player_name\": player_name[:30]}\n"
+        variables:
+        - variable: identity_body
+          value_selector:
+          - identify
+          - body
+        outputs:
+          scope_id:
+            type: string
+            children: null
+          player_name:
+            type: string
+            children: null
+      position:
+        x: 840
+        y: 300
+      positionAbsolute:
+        x: 840
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 160
+      zIndex: 0
+      isPrompty: false
+    - id: memory_search
+      type: custom
+      data:
+        type: http-request
+        title: 查个人记忆
+        desc: PowerContext /v1/memory/search —— 旅行者过往身份与恩怨
+        method: post
+        url: http://host.docker.internal:9010/v1/chronicle/memory_search
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type: application/json'
+        params: ''
+        body:
+          type: json
+          data:
+          - key: ''
+            type: text
+            value: '{"scope_id": "{{#extract_identity.scope_id#}}", "query": "{{#prepare.clean_query#}}"}'
+            file: []
+        timeout:
+          connect: 10
+          read: 180
+          write: 30
+        ssl_verify: false
+        error_strategy: fail-branch
+        retry_config:
+          max_retries: 2
+          retry_interval: 800
+          retry_enabled: true
+      position:
+        x: 1100
+        y: 300
+      positionAbsolute:
+        x: 1100
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 140
+      zIndex: 0
+      isPrompty: false
+    - id: recall
+      type: custom
+      data:
+        type: http-request
+        title: 查世界档案
+        desc: seekdb 三条混合检索：向量设定召回 / MATCH全文过滤+l2_distance向量排序 / 近事；附编年时钟
+        method: post
+        url: http://host.docker.internal:9010/v1/chronicle/recall
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type: application/json'
+        params: ''
+        body:
+          type: json
+          data:
+          - key: ''
+            type: text
+            value: '{"query": "{{#prepare.clean_query#}}", "k": 3, "keyword": ""}'
+            file: []
+        timeout:
+          connect: 10
+          read: 180
+          write: 30
+        ssl_verify: false
+        error_strategy: fail-branch
+        retry_config:
+          max_retries: 2
+          retry_interval: 800
+          retry_enabled: true
+      position:
+        x: 1360
+        y: 300
+      positionAbsolute:
+        x: 1360
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 140
+      zIndex: 0
+      isPrompty: false
+    - id: build_context
+      type: custom
+      data:
+        type: code
+        title: 拼装上下文
+        desc: ''
+        code_language: python3
+        code: "import json\n\n\ndef _fmt_events(items):\n    lines = []\n    for it in items or []:\n        try:\n            lines.append(\n                \"- 纪元%s年·%s·%s（%s）：%s\" % (it.get(\"year\"\
+          , \"\"), it.get(\"location\", \"\"), it.get(\"actor\", \"\"), it.get(\"entry_type\", \"\"), it.get(\"content\", \"\"))\n            )\n        except Exception:\n            continue\n    return\
+          \ lines\n\n\ndef main(pc_body: str, recall_body: str, identity_body: str, clean_query: str) -> dict:\n    pc = {}\n    rc = {}\n    idn = {}\n    try:\n        pc = json.loads(pc_body) if pc_body\
+          \ else {}\n    except Exception:\n        pc = {}\n    try:\n        rc = json.loads(recall_body) if recall_body else {}\n    except Exception:\n        rc = {}\n    try:\n        idn = json.loads(identity_body)\
+          \ if identity_body else {}\n    except Exception:\n        idn = {}\n    current_year = int(rc.get(\"latest_year\") or 4)\n    display_name = str(idn.get(\"player_name\") or \"\")\n    hits =\
+          \ pc.get(\"hits\") or []\n    mem_lines = [\"- \" + str(h.get(\"text\", \"\")) for h in hits if str(h.get(\"text\", \"\")).strip()]\n    lore_lines = []\n    for r in (rc.get(\"lore\") or [])[:4]:\n\
+          \        lore_lines.append(\"- 【%s】%s：%s\" % (r.get(\"category\"), r.get(\"name\"), r.get(\"content\")))\n    evt_lines = _fmt_events((rc.get(\"events\") or [])[:4])\n    rec_lines = _fmt_events((rc.get(\"\
+          recent\") or [])[:3])\n    memory_block = \"\\n\".join(mem_lines) if mem_lines else \"（档案中还没有这位旅行者的个人记录）\"\n    lore_block = \"\\n\".join(lore_lines) if lore_lines else \"（无相关设定）\"\n    events_block\
+          \ = \"\\n\".join(evt_lines) if evt_lines else \"（无相关史事）\"\n    recent_block = \"\\n\".join(rec_lines) if rec_lines else \"（暂无）\"\n    user_prompt = (\n        \"【当前时间】纪元%d年\\n\"\n        \"【旅行者】%s\\\
+          n\"\n        \"【行动】%s\\n\\n\"\n        \"【旅行者个人记忆 · 来自 PowerContext】\\n%s\\n\\n\"\n        \"【世界设定 · 相关条目 · 来自 seekdb 向量检索】\\n%s\\n\\n\"\n        \"【编年史 · 相关史事 · 来自 seekdb 全文+向量混合检索】\\n%s\\n\\\
+          n\"\n        \"【最近纪事】\\n%s\\n\\n请按系统指令输出 JSON。\"\n    ) % (\n        current_year,\n        display_name or \"无名旅人\",\n        clean_query,\n        memory_block,\n        lore_block,\n      \
+          \  events_block,\n        recent_block,\n    )\n    return {\"user_prompt\": user_prompt, \"current_year\": current_year,\n            \"display_name\": display_name or \"无名旅人\"}\n"
+        variables:
+        - variable: pc_body
+          value_selector:
+          - memory_search
+          - body
+        - variable: recall_body
+          value_selector:
+          - recall
+          - body
+        - variable: identity_body
+          value_selector:
+          - identify
+          - body
+        - variable: clean_query
+          value_selector:
+          - prepare
+          - clean_query
+        outputs:
+          user_prompt:
+            type: string
+            children: null
+          current_year:
+            type: number
+            children: null
+          display_name:
+            type: string
+            children: null
+      position:
+        x: 1620
+        y: 300
+      positionAbsolute:
+        x: 1620
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 160
+      zIndex: 0
+      isPrompty: false
+    - id: llm
+      type: custom
+      data:
+        type: llm
+        title: 镇志官执笔
+        desc: 根据世界档案与个人记忆续写故事
+        model:
+          provider: langgenius/openai_api_compatible/openai_api_compatible
+          name: qwen2.5-3b-instruct
+          mode: chat
+          completion_params:
+            temperature: 0.6
+            max_tokens: 900
+        prompt_template:
+        - role: system
+          text: '你是雾隐镇的镇志官——在市政厅地下档案库干了三十年的老档案员，一丝不苟、庄重、有冷幽默。小镇终年被雾笼罩，条例是唯一的真理，《镇志》记录一切。
+
+
+            根据旅行者的行动完成三件事：
+
+
+            一、narrative（续写小镇故事）：
+
+            - 第三人称，必须写满200-300字。旅行者有名号就用名号，没有就称"无名旅人"。
+
+            - 【行动】是本回合主线：写出谁、在哪、做了什么、旁人如何反应、造成什么后果。禁止用省略号或"……"代替叙事。
+
+            - 【编年史】里的旧事只能作为回忆、调侃或后果来引用，不要复述旧事代替新行动。
+
+            - 【世界设定】里的设定必须至少化用一条（人物、地点、条例或传说）。
+
+            - 越离谱的行动越要用庄严公文腔处理——幽默来自一本正经。触犯条例（如《喷泉洁净条例》）必须有罚单、传唤或市政官格雷布·扳脸的介入。
+
+            - 叙事结尾不要总结陈词，留给镇志条目。
+
+
+            二、chronicle（镇志条目）：
+
+            - 正史腔，50字内，形如"纪元X年：……"，只记本回合的新行动。
+
+            - entry_type：deed（壮举）/incident（事件）/rumor（传闻）/verdict（官方处置）。
+
+            - importance：小事2、引人围观3、载入史册4、惊动市政官或改写条例5。
+
+
+            三、memory_updates（0-2条，宁缺毋滥）：
+
+            - kind：identity（身份声望）/deed（难忘行为）/relationship（NPC关系）/thread（未了结的事）。
+
+            - text：第三人称一句话（30字内），供未来检索。
+
+
+            year_advance：本回合推进的年数，通常0或1，大事件2-3。
+
+
+            location 尽量用【世界设定】里已有的地名。
+
+
+            输出格式示例（照此结构，填入你的实际创作，不要抄示例内容，不要省略号）：
+
+            {"narrative": "纪元4年春，雾未散。旅行者径直走向中心喷泉广场，挽起袖子把脚伸进了泉水。周围霎时安静——随后是一整条街的抽气声。市政官格雷布·扳脸从市政厅的窗口探出半个身子，手里的《喷泉洁净条例》被捏出了褶皱。", "chronicle": "纪元4年：无名旅人擅入中心喷泉广场洗浴，市政官格雷布·扳脸当场开具罚单。", "location": "中心喷泉广场",
+            "entry_type": "incident", "importance": 4, "memory_updates": [{"kind": "deed", "text": "在喷泉里洗过澡，被罚款五枚铜币"}], "year_advance": 0}'
+        - role: user
+          text: '{{#build_context.user_prompt#}}'
+        memory: null
+        context:
+          enabled: false
+          variable_selector: []
+        vision:
+          enabled: false
+      position:
+        x: 1880
+        y: 300
+      positionAbsolute:
+        x: 1880
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 140
+      zIndex: 0
+      isPrompty: false
+    - id: parse
+      type: custom
+      data:
+        type: code
+        title: 解析镇志输出
+        desc: 解析 JSON，清洗引号换行（保证后续 HTTP body 合法）
+        code_language: python3
+        code: "import json\nimport re\n\n\ndef _clean(s):\n    return str(s or \"\").replace('\"', \"'\").replace(\"\\r\", \" \").replace(\"\\n\", \" \").strip()\n\n\ndef main(llm_text: str, current_year:\
+          \ float) -> dict:\n    raw = (llm_text or \"\").strip()\n    if raw.startswith(\"```\"):\n        raw = raw.strip(\"`\")\n        if raw.lower().startswith(\"json\"):\n            raw = raw[4:]\n\
+          \        raw = raw.strip()\n    data = {}\n    try:\n        start = raw.find(\"{\")\n        end = raw.rfind(\"}\")\n        if start >= 0 and end > start:\n            data = json.loads(raw[start\
+          \ : end + 1])\n    except Exception:\n        data = {}\n    narrative = str(data.get(\"narrative\") or raw or \"（镇志官搁下了笔。）\").strip()\n    fallback = \"此事蹊跷，容后再录。\"\n    chronicle = _clean(data.get(\"\
+          chronicle\") or fallback)[:200]\n    m_ch = re.search(r\"纪元[0-9元年]+年[：:].+?[。．]\", chronicle)\n    if m_ch:\n        chronicle = m_ch.group(0)\n    location = _clean(data.get(\"location\") or\
+          \ \"雾隐镇\")[:60]\n    entry_type = _clean(data.get(\"entry_type\") or \"incident\")[:16]\n    try:\n        importance = max(1, min(5, int(data.get(\"importance\") or 2)))\n    except Exception:\n\
+          \        importance = 2\n    if chronicle == fallback:\n        importance = 0\n    try:\n        year_advance = max(0, min(5, int(data.get(\"year_advance\") or 0)))\n    except Exception:\n \
+          \       year_advance = 0\n    updates = data.get(\"memory_updates\") or []\n    clean_updates = []\n    for u in updates:\n        if isinstance(u, dict) and str(u.get(\"text\") or \"\").strip():\n\
+          \            clean_updates.append({\"kind\": _clean(u.get(\"kind\") or \"deed\")[:64], \"text\": _clean(u.get(\"text\"))[:300]})\n    clean_updates = clean_updates[:2]\n    return {\n        \"\
+          narrative\": narrative,\n        \"chronicle\": chronicle,\n        \"location\": location,\n        \"entry_type\": entry_type,\n        \"importance\": importance,\n        \"year_advance\"\
+          : year_advance,\n        \"event_year\": int(current_year),\n        \"updates_json\": json.dumps(clean_updates, ensure_ascii=False),\n    }\n"
+        variables:
+        - variable: llm_text
+          value_selector:
+          - llm
+          - text
+        - variable: current_year
+          value_selector:
+          - build_context
+          - current_year
+        outputs:
+          narrative:
+            type: string
+            children: null
+          chronicle:
+            type: string
+            children: null
+          location:
+            type: string
+            children: null
+          entry_type:
+            type: string
+            children: null
+          importance:
+            type: number
+            children: null
+          year_advance:
+            type: number
+            children: null
+          event_year:
+            type: number
+            children: null
+          updates_json:
+            type: string
+            children: null
+      position:
+        x: 2140
+        y: 300
+      positionAbsolute:
+        x: 2140
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 160
+      zIndex: 0
+      isPrompty: false
+    - id: archive
+      type: custom
+      data:
+        type: http-request
+        title: 存入镇志(seekdb)
+        desc: 新事件 embed 后写入 seekdb mistvale_events，并推进 mistvale_clock 编年时钟
+        method: post
+        url: http://host.docker.internal:9010/v1/chronicle/archive
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type: application/json'
+        params: ''
+        body:
+          type: json
+          data:
+          - key: ''
+            type: text
+            value: '{"year": {{#parse.event_year#}}, "location": "{{#parse.location#}}", "actor": "{{#build_context.display_name#}}", "entry_type": "{{#parse.entry_type#}}", "content": "{{#parse.chronicle#}}",
+              "importance": {{#parse.importance#}}, "session_id": "{{#sys.conversation_id#}}", "year_advance": {{#parse.year_advance#}}}'
+            file: []
+        timeout:
+          connect: 10
+          read: 180
+          write: 30
+        ssl_verify: false
+        error_strategy: fail-branch
+        retry_config:
+          max_retries: 2
+          retry_interval: 800
+          retry_enabled: true
+      position:
+        x: 2400
+        y: 300
+      positionAbsolute:
+        x: 2400
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 140
+      zIndex: 0
+      isPrompty: false
+    - id: remember
+      type: custom
+      data:
+        type: http-request
+        title: 写入记忆(PowerContext)
+        desc: 镇志官决定长期记住的事 → PowerContext /v1/memory/remember
+        method: post
+        url: http://host.docker.internal:9010/v1/chronicle/remember
+        authorization:
+          type: no-auth
+          config: null
+        headers: 'Content-Type: application/json'
+        params: ''
+        body:
+          type: json
+          data:
+          - key: ''
+            type: text
+            value: '{"scope_id": "{{#extract_identity.scope_id#}}", "updates": {{#parse.updates_json#}}}'
+            file: []
+        timeout:
+          connect: 10
+          read: 180
+          write: 30
+        ssl_verify: false
+        error_strategy: fail-branch
+        retry_config:
+          max_retries: 2
+          retry_interval: 800
+          retry_enabled: true
+      position:
+        x: 2660
+        y: 300
+      positionAbsolute:
+        x: 2660
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 140
+      zIndex: 0
+      isPrompty: false
+    - id: answer
+      type: custom
+      data:
+        type: answer
+        title: 回复旅行者
+        desc: ''
+        answer: '{{#parse.narrative#}}
+
+
+          ---
+
+          📜 **【镇志 · 纪元{{#parse.event_year#}}年】** {{#parse.chronicle#}}
+
+          （本条已由镇志官存入雾隐镇档案库 · 机密等级 {{#parse.importance#}}）'
+      position:
+        x: 2920
+        y: 300
+      positionAbsolute:
+        x: 2920
+        y: 300
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+      dragging: false
+      width: 244
+      height: 116
+      zIndex: 0
+      isPrompty: false
+  rag_pipeline_variables: []
