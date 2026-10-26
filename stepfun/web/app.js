@@ -52,19 +52,14 @@ async function loadModel() {
   $("badge-model").className = "badge";
 
   state.modelBytes = 0;
-  const seen = new Set();
+  const fileBytes = new Map();
   const progress_callback = (p) => {
-    if (p.status === "progress" && p.file && !seen.has(p.file)) {
-      seen.add(p.file);
-    }
-    if (p.status === "progress" && p.total > 0) {
-      state.modelBytes = Math.max(state.modelBytes, 0);
+    if (p.file && p.total > 0) {
+      fileBytes.set(p.file, Math.max(fileBytes.get(p.file) || 0, p.total));
+      state.modelBytes = [...fileBytes.values()].reduce((s, v) => s + v, 0);
       const pct = Math.round((p.loaded / p.total) * 100);
       $("model-progress").style.width = `${Math.min(100, pct)}%`;
       $("model-meta").textContent = `下载 ${p.file} … ${pct}%`;
-    }
-    if (p.status === "done" && p.file) {
-      state.modelBytes += p.total || 0;
     }
   };
 
@@ -110,6 +105,7 @@ async function loadModel() {
     $("badge-model").textContent = `模型：${modelId.split("/")[1]} · ${dtype} · ${dim}d`;
     $("badge-model").className = "badge ok";
     const mb = (state.modelBytes / 1024 / 1024).toFixed(1);
+    const sizeNote = state.modelBytes > 0 ? `下载体积 ≈ ${mb} MB` : "本次从浏览器缓存加载（未重新下载）";
     const src = "｜下载源 本地 /hf 代理（HF 镜像 CDN）";
     const note = dev === "webgpu"
       ? "优先使用 WebGPU"
@@ -119,7 +115,7 @@ async function loadModel() {
           ? "WebGPU 上该配置不可用，已自动降级为 WASM"
           : "当前环境不支持 WebGPU，已自动降级为 WASM";
     $("model-meta").textContent =
-      `已加载：${modelId}（${dtype}）｜下载体积 ≈ ${mb} MB｜加载耗时 ${state.loadMs} ms｜推理后端 ${backendLabel}（${note}）${src}`;
+      `已加载：${modelId}（${dtype}）｜${sizeNote}｜加载耗时 ${state.loadMs} ms｜推理后端 ${backendLabel}（${note}）${src}`;
     $("model-progress").style.width = "100%";
   } catch (e) {
     $("badge-model").textContent = "模型：加载失败";
@@ -340,8 +336,10 @@ async function quantCompare() {
   const otherDtype = curDtype === "q8" ? "fp32" : "q8";
   const queries = ["向量检索", "全文索引", "混合检索性能", "database kernel", "step function"];
 
-  const output = (lines) => { $("bench-output").textContent = lines.join("\n"); };
-  output(`量化对比（${modelId}）：当前 ${curDtype}，加载对照 ${otherDtype}…`);
+  const output = (lines) => {
+    $("bench-output").textContent = Array.isArray(lines) ? lines.join("\n") : String(lines);
+  };
+  output(["量化对比（" + modelId + "）：当前 " + curDtype + "，加载对照 " + otherDtype + "…"]);
 
   // Embed same corpus with current dtype.
   const corpus = [];
@@ -388,13 +386,18 @@ async function quantCompare() {
   const overlap = (overlapSum / queries.length * 100).toFixed(1);
 
   const sizeOf = (dtype) => dtype === "q8" ? "≈ 23 MB（q8 权重）" : "≈ 90 MB（fp32 权重）";
+  const overlapVal = Number(overlap);
+  const verdict = overlapVal >= 90 ? "无明显退化"
+    : overlapVal >= 70 ? "轻度退化（该语料/查询集上 top-5 重合率 "
+      + overlap + "%），中文任务建议改用中文模型再评估"
+    : "退化明显（重合率 " + overlap + "%），该任务不建议使用此量化档";
   output([
     `量化对比（${modelId}，后端 ${state.device}）：`,
     `  编码 24 段语料：${curDtype} = ${tCur} ms ｜ ${otherDtype} = ${tOther} ms`,
     `  查询相关性一致性（top-5 重合率，5 条查询平均）：${overlap}%`,
     `  权重体积：${sizeOf(curDtype)} vs ${sizeOf(otherDtype)}（压缩比 ≈ 3.9x，数值为该模型公开 ONNX 仓库典型值，以加载时下载字节数为准）`,
     `  对照模型加载耗时：${otherLoadMs} ms`,
-    `  结论：q8 相比 fp32 体积约缩小 4 倍，本批测试中编码质量（top-5 重合率 ${overlap}%）无明显退化。`,
+    `  结论：q8 相比 fp32 体积约缩小 4 倍、本批编码快 ${(tOther / tCur).toFixed(2)}x；top-5 重合率 ${overlap}% —— ${verdict}。`,
   ]);
 }
 
