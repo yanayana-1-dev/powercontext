@@ -166,6 +166,11 @@ from powercontext.builtin.runtime._scope_cache import (
     ScopeCacheObserver,
     ScopeEvictor,
 )
+from powercontext.builtin.runtime.context_pack import (
+    _DEFAULT_CHUNK_BYTES as _DEFAULT_PACK_CHUNK_BYTES,
+    ContextPack,
+    ContextPackDelta,
+)
 from powercontext.builtin.runtime.decision_model import DecisionModel
 from powercontext.builtin.runtime.errors import InvalidRuntimeRequestError, TopicMemoryProcessingUnavailableError
 from powercontext.builtin.runtime.models import (
@@ -488,6 +493,7 @@ class ScopedSourceApplication:
                             span.set_attributes({_MEMORY_CAPTURE_SOURCE_COUNT: 1})
             except BaseValueConflictError as error:
                 raise SourceConflictError("identity", error.identity) from None
+            await self._runtime._maybe_request_count_processing(self.scope_id)
             return SourceReceipt(
                 source_ref=SourceRef(source_type=record.source_type, source_id=record.source_id),
                 sequence=record.position,
@@ -504,7 +510,8 @@ class ScopedSourceApplication:
                 )
                 if span is not None:
                     span.set_attributes({_MEMORY_CAPTURE_SOURCE_COUNT: 1})
-            return SourceReceipt(source_ref=context.sources.catalog.as_ref(source), sequence=sequence)
+        await self._runtime._maybe_request_count_processing(self.scope_id)
+        return SourceReceipt(source_ref=context.sources.catalog.as_ref(source), sequence=sequence)
 
 
 class SourceApplication:
@@ -563,7 +570,9 @@ class ScopedRecordApplication:
         /,
     ) -> ArtifactCreated:
         async with self._runtime._scope_operation(self.scope_id), self._runtime._locked(self.scope_id):
-            return await self._runtime._records().create_artifact(self.scope_id, family, write)
+            created = await self._runtime._records().create_artifact(self.scope_id, family, write)
+        await self._runtime._maybe_request_count_processing(self.scope_id)
+        return created
 
     async def get_artifact(self, family: str, artifact_id: str, /) -> ArtifactRecord:
         async with self._runtime._scope_operation(self.scope_id):
@@ -846,6 +855,31 @@ class ScopedContextApplication:
             if authorize_scopes is not None:
                 await authorize_scopes((self.scope_id, *scope.context_references))
             return await self._prepare(request, scope)
+
+    async def prepare_incremental(
+        self,
+        request: PrepareContextRequest,
+        base_pack: ContextPack | None = None,
+        *,
+        chunk_bytes: int = _DEFAULT_PACK_CHUNK_BYTES,
+    ) -> ContextPack | ContextPackDelta:
+        """Prepare this turn as a full Context Pack, or as a delta against ``base_pack``."""
+
+        if (
+            request.assembly is not None
+            and sum(section.limit for section in request.assembly.sections) > self._runtime.context_assembly_max_entries
+        ):
+            raise InvalidRuntimeRequestError("context-assembly-entry-limit")
+        async with self._runtime._scope_operation(self.scope_id) as scope:
+            if request.assembly is not None and not request.assembly.sections and not request.include_code:
+                content: str | None = None
+            else:
+                build, _effort = await self._prepare_build(request, scope)
+                content = build.context.content
+        target = ContextPack.from_content(content or "", chunk_bytes=chunk_bytes)
+        if base_pack is None:
+            return target
+        return ContextPackDelta.between(base_pack, target)
 
     async def _prepare(self, request: PrepareContextRequest, scope: ScopeDescriptor, /) -> PreparedContext:
         build, effort = await self._prepare_build(request, scope)
@@ -3027,6 +3061,7 @@ class BuiltinRuntime:
         remote_ingestion: RemoteIngestion | None = None,
         dream_service: DreamService | None = None,
         generation_concurrency: int = 4,
+        lifecycle_database: Any = None,
     ) -> None:
         if source_window_limit < 1:
             raise _RuntimeConfigurationError("source_window_limit")
@@ -3101,6 +3136,10 @@ class BuiltinRuntime:
         self._scheduler_runtime_key: str | None = None
         self.sources = SourceApplication(self)
         self.ingestion = RemoteIngestionApplication(self, remote_ingestion)
+        from powercontext.builtin.runtime.source_lifecycle import SourceLifecycleApplication
+
+        self._lifecycle_database = lifecycle_database
+        self.lifecycle = SourceLifecycleApplication(self)
         self.code = CodeApplication(self, code_service or CodeService(CodeConfig()))
         self.context = ContextApplication(self)
         self.experience = ExperienceApplication(self)
@@ -3432,6 +3471,47 @@ class BuiltinRuntime:
         if self._record_service is None:
             raise _RuntimeStateError("records")
         return self._record_service
+
+    async def _maybe_request_count_processing(self, scope_id: str, /) -> None:
+        """Admit one scope into Families whose pending journal count reached its threshold."""
+
+        supervisor = self.artifact_processing_supervisor
+        if supervisor is None:
+            return
+        thresholds = supervisor.count_thresholds()
+        contexts = getattr(self.ingestion, "_service", None)
+        if not thresholds or contexts is None:
+            return
+        for binding_name, threshold in thresholds.items():
+            try:
+                await contexts.request_processing_at_count(scope_id, binding_name, threshold)
+            except Exception as error:
+                log_safely(
+                    logger,
+                    logging.WARNING,
+                    "Count admission request failed",
+                    exc_info=error,
+                    extra={
+                        "event": "artifact_processing.count_request_failed",
+                        "outcome": "failure",
+                        "unit": "artifact-processing",
+                    },
+                )
+                return
+        try:
+            supervisor.wake()
+        except Exception as error:  # pragma: no cover - wake only touches in-memory state
+            log_safely(
+                logger,
+                logging.WARNING,
+                "Count admission supervisor wake failed",
+                exc_info=error,
+                extra={
+                    "event": "artifact_processing.count_wake_failed",
+                    "outcome": "failure",
+                    "unit": "artifact-processing",
+                },
+            )
 
     def _generation(self, scope_id: str) -> ReviewedGenerationService:
         if self._generation_service is None:

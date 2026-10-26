@@ -154,6 +154,19 @@ class RuntimeConfig(BaseModel):
     memory_compaction_enabled: bool = False
     memory_compaction_min_tombstone_revisions: int = Field(default=10, ge=0)
     memory_max_history_revisions: int = Field(default=100, ge=1)
+    memory_source_count_threshold: int | None = None
+    topic_memory_source_count_threshold: int | None = None
+
+    @field_validator("memory_source_count_threshold", "topic_memory_source_count_threshold", mode="before")
+    @classmethod
+    def reject_non_integer_count_threshold(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("count threshold must be None or a strict positive integer")  # noqa: TRY003, TRY004
+        if value < 1:
+            raise ValueError("count threshold must be a strict positive integer")  # noqa: TRY003
+        return value
 
     @model_validator(mode="after")
     def validate_memory_capacity_order(self) -> RuntimeConfig:

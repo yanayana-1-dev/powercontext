@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from itertools import chain
@@ -93,6 +95,16 @@ class PreparedContextOmissions:
 
 
 @dataclass(frozen=True)
+class PreparedContextFragment:
+    """One verbatim evidence fragment selected from a Memory entry."""
+
+    address: MemoryEntryAddress
+    start: int
+    end: int
+    text: str
+
+
+@dataclass(frozen=True)
 class PreparedContextBuild:
     """Final public context and the exact origins selected to produce it.
 
@@ -106,6 +118,7 @@ class PreparedContextBuild:
     origins: tuple[PreparedContextOrigin, ...]
     omissions: PreparedContextOmissions = PreparedContextOmissions()
     code_origins: tuple[CodeEvidenceRef, ...] = ()
+    fragments: tuple[PreparedContextFragment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -234,6 +247,13 @@ class PreparedContextBuilder:
             raise PreparedContextInvariantError("topic-memory-candidate-limit")
         if sum(len(candidates.hits) for candidates in experience_candidates) > self.experience_candidate_limit:
             raise PreparedContextInvariantError("experience-candidate-limit")
+
+        if request.evidence_selection:
+            return self._build_evidence_result(
+                request=request,
+                current_scope_id=current_scope_id,
+                memory_candidates=memory_candidates,
+            )
 
         content, origins, omissions = self._select_entries(
             request=request,
@@ -568,6 +588,48 @@ class PreparedContextBuilder:
             )
         return tuple(experience_entries)
 
+    def _build_evidence_result(
+        self,
+        *,
+        request: PrepareContextRequest,
+        current_scope_id: str | None,
+        memory_candidates: Sequence[PreparedMemoryCandidates],
+    ) -> PreparedContextBuild:
+        """Select query-relevant verbatim fragments under the full-output byte budget."""
+
+        ranked = _rank_fragment_candidates(
+            query=request.query,
+            memory_candidates=memory_candidates,
+            current_scope_id=current_scope_id,
+        )
+        selected: list[_EvidenceItem] = []
+        content: str | None = None
+        content_bytes = 0
+        for candidate in ranked:
+            if any(
+                candidate[0] == item[0] and candidate[1] < item[2] and item[1] < candidate[2]
+                for item in selected
+            ):
+                continue
+            trial = [*selected, candidate]
+            rendered = _render_evidence(trial)
+            rendered_bytes = len(rendered.encode("utf-8"))
+            if rendered_bytes > request.max_bytes:
+                continue
+            selected = trial
+            content = rendered
+            content_bytes = rendered_bytes
+        if content is None:
+            return PreparedContextBuild(context=self.empty(), origins=(), fragments=())
+        return PreparedContextBuild(
+            context=PreparedContext(status="ready", content=content, content_bytes=content_bytes),
+            origins=tuple(item[0] for item in selected),
+            fragments=tuple(
+                PreparedContextFragment(address=item[0], start=item[1], end=item[2], text=item[3])
+                for item in selected
+            ),
+        )
+
     def _fit_entries(
         self,
         request: PrepareContextRequest,
@@ -728,3 +790,94 @@ def _truncate_utf8(text: str, byte_budget: int) -> str:
     prefix_budget = byte_budget - len(_ELLIPSIS.encode("utf-8"))
     encoded_prefix = text.encode("utf-8")[:prefix_budget]
     return f"{encoded_prefix.decode('utf-8', errors='ignore')}{_ELLIPSIS}"
+
+
+_EvidenceItem = tuple[MemoryEntryAddress, int, int, str, dict[str, object]]
+_SEGMENT_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+
+
+def _segment_tokens(text: str) -> frozenset[str]:
+    return frozenset(_SEGMENT_TOKEN_PATTERN.findall(text.casefold()))
+
+
+def _sentence_spans(text: str) -> tuple[tuple[int, int], ...]:
+    spans: list[tuple[int, int]] = []
+    length = len(text)
+    start = 0
+    index = 0
+    while index < length:
+        if text[index] in ".!?" and (index + 1 == length or text[index + 1].isspace()):
+            end = index + 1
+            if text[start:end].strip():
+                spans.append((start, end))
+            while end < length and text[end].isspace():
+                end += 1
+            start = end
+            index = end
+        else:
+            index += 1
+    if start < length and text[start:length].strip():
+        spans.append((start, length))
+    return tuple(spans)
+
+
+def _rank_fragment_candidates(
+    *,
+    query: str,
+    memory_candidates: Sequence[PreparedMemoryCandidates],
+    current_scope_id: str | None,
+) -> list[_EvidenceItem]:
+    """Score sentence-level fragments by query-term overlap with rare-term weighting."""
+
+    query_tokens = _segment_tokens(query)
+    documents = [tuple(_segment_tokens(hit.text) for hit in group.hits) for group in memory_candidates]
+    document_count = sum(len(doc) for doc in documents) or 1
+
+    def idf(token: str) -> float:
+        containing = sum(1 for doc in documents for entry in doc if token in entry)
+        return math.log(1.0 + document_count / (1.0 + containing))
+
+    ranked: list[tuple[tuple[float, int, int, int], _EvidenceItem]] = []
+    order = 0
+    for group_index, group in enumerate(memory_candidates):
+        if group.memory_ref is None:
+            continue
+        for hit_rank, hit in enumerate(group.hits):
+            memory = ArtifactAddress(
+                scope_id=group.scope_id or current_scope_id or "",
+                artifact=hit.memory_ref,
+            )
+            address = MemoryEntryAddress(memory=memory, entry_id=hit.entry_id, entry_version_id=hit.entry_version_id)
+            for start, end in _sentence_spans(hit.text):
+                text = hit.text[start:end]
+                tokens = _segment_tokens(text)
+                overlap = query_tokens & tokens
+                score = sum(idf(token) for token in overlap) if overlap else -1.0
+                order += 1
+                citation = {
+                    "scope_id": memory.scope_id,
+                    "memory_ref": hit.memory_ref.model_dump(mode="json"),
+                    "entry_id": address.entry_id,
+                    "entry_version_id": address.entry_version_id,
+                }
+                item: _EvidenceItem = (address, start, end, text, citation)
+                ranked.append(((score, -hit_rank, -start, -order), item))
+    ranked.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _key, item in ranked]
+
+
+def _render_evidence(items: Sequence[_EvidenceItem]) -> str:
+    envelope = {
+        "trust": "untrusted_history",
+        "items": [
+            {
+                "citation": item[4],
+                "content": item[3],
+                "start": item[1],
+                "end": item[2],
+            }
+            for item in items
+        ],
+    }
+    encoded = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+    return "\n\n".join((TRUST_POLICY, f"{_BEGIN_MARKER}\n{encoded}\n{_END_MARKER}"))

@@ -952,6 +952,27 @@ class RelationalContexts:
                 )
         return pending is not None
 
+    async def request_processing_at_count(
+        self,
+        scope_id: str,
+        binding_name: str,
+        threshold: int,
+        /,
+    ) -> bool:
+        """Persist one count-admitted processing generation for one binding."""
+
+        scope = validate_scope_id(scope_id)
+        async with self.database.transaction() as connection:
+            pending = await self.repositories.processing_pending.request_flush_at_count(
+                connection,
+                scope,
+                binding_name,
+                threshold,
+            )
+            if pending is not None:
+                await ArtifactProcessingIntentRepository().request(connection, scope, binding_name)
+        return pending is not None
+
     async def browse_topic_memories(
         self,
         scope_id: str,
@@ -991,7 +1012,7 @@ class RelationalContexts:
             embedding_profile = query_embedding.embedding_profile
         scope = validate_scope_id(scope_id)
         async with self.database.transaction() as connection:
-            return await self.repositories.topic_memories.search(
+            result = await self.repositories.topic_memories.search(
                 connection,
                 scope,
                 query,
@@ -1001,6 +1022,36 @@ class RelationalContexts:
                 embedding_profile=embedding_profile,
                 admission=admission,
             )
+            withdrawn = await self._withdrawn_lifecycle_topics(connection, scope)
+        if withdrawn:
+            hits = tuple(
+                hit for hit in result.hits if (hit.artifact_ref.artifact_id, hit.artifact_ref.revision) not in withdrawn
+            )
+            result = result.model_copy(update={"hits": hits})
+        return result
+
+    async def _withdrawn_lifecycle_topics(self, connection: AsyncConnection, scope_id: str, /) -> frozenset:
+        """Report Topic heads withdrawn by Source lifecycle propagation."""
+
+        from powercontext.builtin.persistence.tables import SOURCE_LIFECYCLE_NODES_TABLE
+
+        rows = (
+            await connection.execute(
+                select(SOURCE_LIFECYCLE_NODES_TABLE.c.reference).where(
+                    SOURCE_LIFECYCLE_NODES_TABLE.c.scope_id == scope_id,
+                    SOURCE_LIFECYCLE_NODES_TABLE.c.kind == "topic",
+                    SOURCE_LIFECYCLE_NODES_TABLE.c.available == False,  # noqa: E712 - SQL boolean literal
+                )
+            )
+        ).all()
+        withdrawn: set[tuple[str, int]] = set()
+        for (payload,) in rows:
+            if isinstance(payload, (bytes, bytearray)):
+                payload = bytes(payload).decode("utf-8")
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            withdrawn.add((str(payload["artifact_id"]), int(payload["revision"])))
+        return frozenset(withdrawn)
 
     async def search_skills(
         self,

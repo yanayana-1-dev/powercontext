@@ -171,6 +171,40 @@ class ArtifactProcessingPendingRepository:
         binding_name: str,
         /,
     ) -> StoredArtifactProcessingPending | None:
+        return await self._request_flush_if(
+            connection,
+            scope_id,
+            binding_name,
+            minimum_pending=1,
+        )
+
+    async def request_flush_at_count(
+        self,
+        connection: AsyncConnection,
+        scope_id: str,
+        binding_name: str,
+        threshold: int,
+        /,
+    ) -> StoredArtifactProcessingPending | None:
+        """Accept one processing wave only when the pending journal count reached ``threshold``."""
+
+        _require_nonnegative("threshold", threshold)
+        return await self._request_flush_if(
+            connection,
+            scope_id,
+            binding_name,
+            minimum_pending=threshold,
+        )
+
+    async def _request_flush_if(
+        self,
+        connection: AsyncConnection,
+        scope_id: str,
+        binding_name: str,
+        /,
+        *,
+        minimum_pending: int,
+    ) -> StoredArtifactProcessingPending | None:
         _require_identifier("scope_id", scope_id, MAX_SCOPE_ID_LENGTH)
         _require_identifier("binding_name", binding_name, MAX_BINDING_NAME_LENGTH)
         # Match Source publication and Topic target capture: journal head is
@@ -185,7 +219,8 @@ class ArtifactProcessingPendingRepository:
         )
         source_head = 0 if head is None else int(head)
         cursor = await SourceCursorRepository().load(connection, scope_id, binding_name)
-        if (0 if cursor is None else cursor.cursor.sequence) >= source_head:
+        cursor_sequence = 0 if cursor is None else cursor.cursor.sequence
+        if source_head - cursor_sequence < minimum_pending:
             return None
         await _upsert_pending(
             connection,
@@ -504,6 +539,11 @@ def _require_identifier(field: str, value: object, maximum: int) -> None:
         raise InvalidRepositoryArgumentError(field, "must be a non-empty trimmed string")
     if len(value) > maximum:
         raise InvalidRepositoryArgumentError(field, f"must not exceed {maximum} characters")
+
+
+def _require_nonnegative(field: str, value: int) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise InvalidRepositoryArgumentError(field, "must be a non-negative integer")
 
 
 def _require_position(field: str, value: int) -> None:

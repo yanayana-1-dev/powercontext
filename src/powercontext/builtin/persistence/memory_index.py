@@ -191,8 +191,9 @@ class CompositeMemoryIndex:
 
     def __init__(self, *indexes: MemoryIndex) -> None:
         self.indexes = indexes
-        fts = any(index.capabilities.fts for index in indexes)
+        fts_indexes = tuple(index for index in indexes if index.capabilities.fts)
         vector_indexes = tuple(index for index in indexes if index.capabilities.vector)
+        fts = bool(fts_indexes)
         profile = vector_indexes[0].capabilities.embedding_profile if vector_indexes else None
         self.capabilities = MemoryCapabilities(
             fts=fts,
@@ -202,6 +203,15 @@ class CompositeMemoryIndex:
             tag_filter=all(index.capabilities.tag_filter for index in indexes),
         )
         self.tables = tuple(table for index in indexes for table in index.tables)
+        # One native statement may serve hybrid candidates when the composition is
+        # exactly one lexical and one vector index that both support the dialect.
+        self._hybrid_search = (
+            getattr(vector_indexes[0], "_hybrid_companion", None)
+            if fts and len(fts_indexes) == 1 and len(vector_indexes) == 1
+            and getattr(fts_indexes[0], "hybrid_support", False)
+            and getattr(vector_indexes[0], "hybrid_support", False)
+            else None
+        )
 
     async def initialize(self, connection: AsyncConnection, /) -> None:
         for index in self.indexes:
@@ -247,6 +257,8 @@ class CompositeMemoryIndex:
         request: MemorySearchRequest,
         /,
     ) -> MemorySearchChannels:
+        if request.mode == "hybrid" and self._hybrid_search is not None:
+            return await self._hybrid_search(connection, scope_id, request)
         fts: tuple[MemoryChannelHit, ...] = ()
         vector: tuple[MemoryChannelHit, ...] = ()
         for index in self.indexes:

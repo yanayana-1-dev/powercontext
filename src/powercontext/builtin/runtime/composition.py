@@ -651,6 +651,7 @@ async def open_builtin_runtime(
                 scheduled_source_runner=scheduled_source_runner,
                 scheduled_experience_runner=scheduled_experience_runner,
                 remote_ingestion=contexts,
+                lifecycle_database=contexts.database,
             )
         )
         runtime.artifact_processing_supervisor = await resources.enter_async_context(
@@ -771,6 +772,7 @@ def _artifact_processing_bindings(  # noqa: C901 - validate and assemble one reg
             entrypoint = partial(run_family_worker, FamilyWorkerSpec(config=config, worker_security=worker_security))
         interval = None if family == "profile" else automatic[family]
         binding = canonical[family]
+        count_threshold = getattr(config.runtime, f"{prefix}_source_count_threshold", None)
         configured.append(
             ArtifactProcessingBinding(
                 binding_name=binding,
@@ -787,6 +789,7 @@ def _artifact_processing_bindings(  # noqa: C901 - validate and assemble one reg
                 if family == "skill"
                 else SourceProcessingPendingProvider(contexts.database, binding, family),
                 automatic_scope_filter=enabled_profile_scopes if family == "profile" else None,
+                count_threshold=None if count_threshold is None else int(count_threshold),
             )
         )
     _validate_processing_registrations(configured)

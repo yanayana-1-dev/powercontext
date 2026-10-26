@@ -117,6 +117,9 @@ class ArtifactProcessingBinding:
     # Only automatic admission is filtered; already accepted requests retain
     # their own Worker authorization and domain completion semantics.
     automatic_scope_filter: Callable[[AsyncConnection, tuple[str, ...]], Awaitable[frozenset[str]]] | None = None
+    # Pending-journal count that admits the scope through the requested channel
+    # without waiting for a schedule tick or an explicit flush.
+    count_threshold: int | None = None
 
     def __post_init__(self) -> None:
         if not self.binding_name or self.binding_name != self.binding_name.strip():
@@ -515,6 +518,15 @@ class ArtifactProcessingSupervisor:
             if binding_name is None or binding_name == name:
                 state.discovery_pending = True
         self._wake.set()
+
+    def count_thresholds(self) -> dict[str, int]:
+        """Report each Family's pending-journal count admission threshold."""
+
+        return {
+            name: state.binding.count_threshold
+            for name, state in self._families.items()
+            if state.binding.count_threshold is not None
+        }
 
     async def close(self) -> None:
         self._stop.set()
@@ -1191,6 +1203,14 @@ class ArtifactProcessingSupervisors:
     def wake(self, binding_name: str | None = None) -> None:
         for supervisor in self.supervisors:
             supervisor.wake(binding_name)
+
+    def count_thresholds(self) -> dict[str, int]:
+        """Report each Family's pending-journal count admission threshold."""
+
+        thresholds: dict[str, int] = {}
+        for supervisor in self.supervisors:
+            thresholds.update(supervisor.count_thresholds())
+        return thresholds
 
     async def close(self) -> None:
         await asyncio.gather(*(item.close() for item in self.supervisors))
