@@ -602,30 +602,46 @@ class PreparedContextBuilder:
             memory_candidates=memory_candidates,
             current_scope_id=current_scope_id,
         )
+
+        def overlaps(candidate: _EvidenceItem, chosen: Sequence[_EvidenceItem]) -> bool:
+            return any(
+                candidate.address == item.address
+                and candidate.start < item.end
+                and item.start < candidate.end
+                for item in chosen
+            )
+
         selected: list[_EvidenceItem] = []
         content: str | None = None
         content_bytes = 0
         for candidate in ranked:
-            if any(
-                candidate[0] == item[0] and candidate[1] < item[2] and item[1] < candidate[2]
-                for item in selected
-            ):
+            if overlaps(candidate, selected):
                 continue
-            trial = [*selected, candidate]
-            rendered = _render_evidence(trial)
-            rendered_bytes = len(rendered.encode("utf-8"))
-            if rendered_bytes > request.max_bytes:
+            # Grow the fragment into its neighbouring sentences when the budget
+            # allows: gold evidence often continues next to a query hit.
+            placed = False
+            for attempt in (_grow_fragment(candidate), candidate):
+                if overlaps(attempt, selected):
+                    continue
+                trial = [*selected, attempt]
+                rendered = _render_evidence(trial)
+                rendered_bytes = len(rendered.encode("utf-8"))
+                if rendered_bytes > request.max_bytes:
+                    continue
+                selected = trial
+                content = rendered
+                content_bytes = rendered_bytes
+                placed = True
+                break
+            if placed:
                 continue
-            selected = trial
-            content = rendered
-            content_bytes = rendered_bytes
         if content is None:
             return PreparedContextBuild(context=self.empty(), origins=(), fragments=())
         return PreparedContextBuild(
             context=PreparedContext(status="ready", content=content, content_bytes=content_bytes),
-            origins=tuple(item[0] for item in selected),
+            origins=tuple(item.address for item in selected),
             fragments=tuple(
-                PreparedContextFragment(address=item[0], start=item[1], end=item[2], text=item[3])
+                PreparedContextFragment(address=item.address, start=item.start, end=item.end, text=item.text)
                 for item in selected
             ),
         )
@@ -792,7 +808,20 @@ def _truncate_utf8(text: str, byte_budget: int) -> str:
     return f"{encoded_prefix.decode('utf-8', errors='ignore')}{_ELLIPSIS}"
 
 
-_EvidenceItem = tuple[MemoryEntryAddress, int, int, str, dict[str, object]]
+@dataclass(frozen=True)
+class _EvidenceItem:
+    """One ranked sentence-level fragment candidate."""
+
+    address: MemoryEntryAddress
+    start: int
+    end: int
+    text: str
+    citation: dict[str, object]
+    entry_text: str = ""
+    spans: tuple[tuple[int, int], ...] = ()
+    span_index: int = -1
+
+
 _SEGMENT_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 
@@ -821,6 +850,28 @@ def _sentence_spans(text: str) -> tuple[tuple[int, int], ...]:
     return tuple(spans)
 
 
+def _grow_fragment(item: _EvidenceItem, /) -> _EvidenceItem:
+    """Extend one fragment over its adjacent sentences, keeping the interval verbatim."""
+
+    index = item.span_index
+    if index < 0 or not item.spans:
+        return item
+    start = item.spans[index - 1][0] if index > 0 else item.start
+    end = item.spans[index + 1][1] if index + 1 < len(item.spans) else item.end
+    if (start, end) == (item.start, item.end):
+        return item
+    return _EvidenceItem(
+        address=item.address,
+        start=start,
+        end=end,
+        text=item.entry_text[start:end],
+        citation=item.citation,
+        entry_text=item.entry_text,
+        spans=item.spans,
+        span_index=index,
+    )
+
+
 def _rank_fragment_candidates(
     *,
     query: str,
@@ -839,7 +890,7 @@ def _rank_fragment_candidates(
 
     ranked: list[tuple[tuple[float, int, int, int], _EvidenceItem]] = []
     order = 0
-    for group_index, group in enumerate(memory_candidates):
+    for group in memory_candidates:
         if group.memory_ref is None:
             continue
         for hit_rank, hit in enumerate(group.hits):
@@ -848,7 +899,8 @@ def _rank_fragment_candidates(
                 artifact=hit.memory_ref,
             )
             address = MemoryEntryAddress(memory=memory, entry_id=hit.entry_id, entry_version_id=hit.entry_version_id)
-            for start, end in _sentence_spans(hit.text):
+            spans = _sentence_spans(hit.text)
+            for span_index, (start, end) in enumerate(spans):
                 text = hit.text[start:end]
                 tokens = _segment_tokens(text)
                 overlap = query_tokens & tokens
@@ -860,7 +912,16 @@ def _rank_fragment_candidates(
                     "entry_id": address.entry_id,
                     "entry_version_id": address.entry_version_id,
                 }
-                item: _EvidenceItem = (address, start, end, text, citation)
+                item = _EvidenceItem(
+                    address=address,
+                    start=start,
+                    end=end,
+                    text=text,
+                    citation=citation,
+                    entry_text=hit.text,
+                    spans=spans,
+                    span_index=span_index,
+                )
                 ranked.append(((score, -hit_rank, -start, -order), item))
     ranked.sort(key=lambda pair: pair[0], reverse=True)
     return [item for _key, item in ranked]
@@ -871,10 +932,10 @@ def _render_evidence(items: Sequence[_EvidenceItem]) -> str:
         "trust": "untrusted_history",
         "items": [
             {
-                "citation": item[4],
-                "content": item[3],
-                "start": item[1],
-                "end": item[2],
+                "citation": item.citation,
+                "content": item.text,
+                "start": item.start,
+                "end": item.end,
             }
             for item in items
         ],

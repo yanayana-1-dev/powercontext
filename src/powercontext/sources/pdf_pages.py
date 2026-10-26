@@ -19,7 +19,6 @@ from __future__ import annotations
 import hashlib
 import io
 import re
-from typing import Protocol
 from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict
@@ -162,12 +161,6 @@ PDF_PAGE_SOURCE_DEFINITION = AdapterSourceDefinition(
     PDF_PAGE_SOURCE_ADAPTER,
     projections=(PDFPageTextEvidenceProjection(),),
 )
-
-
-class SearchableMemory(Protocol):
-    """The slice of the public scoped Memory API used for evidence retrieval."""
-
-    async def search(self, request: object, /): ...
 
 
 _QUESTION_STOPWORDS = frozenset(

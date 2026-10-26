@@ -170,6 +170,7 @@ from powercontext.builtin.runtime.context_pack import (
     _DEFAULT_CHUNK_BYTES as _DEFAULT_PACK_CHUNK_BYTES,
     ContextPack,
     ContextPackDelta,
+    ContextPackError,
 )
 from powercontext.builtin.runtime.decision_model import DecisionModel
 from powercontext.builtin.runtime.errors import InvalidRuntimeRequestError, TopicMemoryProcessingUnavailableError
@@ -879,6 +880,8 @@ class ScopedContextApplication:
         target = ContextPack.from_content(content or "", chunk_bytes=chunk_bytes)
         if base_pack is None:
             return target
+        if not isinstance(base_pack, ContextPack):
+            raise ContextPackError("base_pack must be a ContextPack")
         return ContextPackDelta.between(base_pack, target)
 
     async def _prepare(self, request: PrepareContextRequest, scope: ScopeDescriptor, /) -> PreparedContext:
@@ -3482,9 +3485,10 @@ class BuiltinRuntime:
         contexts = getattr(self.ingestion, "_service", None)
         if not thresholds or contexts is None:
             return
+        admitted = False
         for binding_name, threshold in thresholds.items():
             try:
-                await contexts.request_processing_at_count(scope_id, binding_name, threshold)
+                admitted = await contexts.request_processing_at_count(scope_id, binding_name, threshold) or admitted
             except Exception as error:
                 log_safely(
                     logger,
@@ -3498,6 +3502,8 @@ class BuiltinRuntime:
                     },
                 )
                 return
+        if not admitted:
+            return
         try:
             supervisor.wake()
         except Exception as error:  # pragma: no cover - wake only touches in-memory state

@@ -39,7 +39,7 @@ class SourceLifecycleError(ValueError):
 class SourceLifecycleEvent(BaseModel):
     """One durable availability transition for one registered Source node."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     node_id: str
     revision: int = Field(ge=1)
@@ -53,6 +53,24 @@ class SourceLifecycleEvent(BaseModel):
         if not value or not value.strip():
             raise SourceLifecycleError("node_id and reason must contain non-whitespace content")
         return value
+
+
+def _event_hash(event: SourceLifecycleEvent, /) -> str:
+    import hashlib
+
+    payload = json.dumps(
+        {
+            "node_id": event.node_id,
+            "revision": event.revision,
+            "sequence": event.sequence,
+            "available": event.available,
+            "reason": event.reason,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _decode_payload(value: object) -> Any:
@@ -74,6 +92,7 @@ class _NodeRow(BaseModel):
     revision: int
     sequence: int
     available: bool
+    event_hash: str | None = None
 
     def reference_json(self) -> str:
         return json.dumps(self.reference, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -97,6 +116,7 @@ async def _load_nodes(connection: AsyncConnection, scope_id: str) -> dict[str, _
             revision=int(row["revision"]),
             sequence=int(row["sequence"]),
             available=bool(row["available"]),
+            event_hash=None if row["event_hash"] is None else str(row["event_hash"]),
         )
     return nodes
 
@@ -116,6 +136,7 @@ async def _save_node(connection: AsyncConnection, scope_id: str, node: _NodeRow)
             revision=node.revision,
             sequence=node.sequence,
             available=node.available,
+            event_hash=node.event_hash,
         )
     )
 
@@ -132,6 +153,7 @@ async def _insert_node(connection: AsyncConnection, scope_id: str, node: _NodeRo
             revision=node.revision,
             sequence=node.sequence,
             available=node.available,
+            event_hash=node.event_hash,
         )
     )
 
@@ -286,13 +308,14 @@ class ScopedSourceLifecycleService:
             if event.sequence < node.sequence:
                 raise SourceLifecycleError("sequence must be monotonically increasing")
             if event.sequence == node.sequence:
-                if node.available != event.available:
-                    raise SourceLifecycleError("sequence was already used with a different outcome")
+                if node.event_hash != _event_hash(event):
+                    raise SourceLifecycleError("sequence was already used with a different event")
                 # Idempotent replay: the durable event is already recorded. Native
                 # state is re-synchronized below without recording a new event.
             else:
                 node.available = event.available
                 node.sequence = event.sequence
+                node.event_hash = _event_hash(event)
                 await _save_node(connection, self.scope_id, node)
             active = compute_active(nodes)
             for node_id, value in active.items():

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 from dataclasses import dataclass, field
 
@@ -36,8 +37,6 @@ def _canonical_json(payload: dict) -> bytes:
 
 
 def _digest_of_items(items: tuple[bytes, ...], /) -> str:
-    import hashlib
-
     unsigned = {"schema": PACK_SCHEMA, "items": [base64.b64encode(item).decode("ascii") for item in items]}
     return DIGEST_PREFIX + hashlib.sha256(_canonical_json(unsigned)).hexdigest()
 
@@ -93,7 +92,12 @@ class ContextPack:
 
         if not isinstance(chunk_bytes, int) or isinstance(chunk_bytes, bool) or chunk_bytes < 1:
             raise ContextPackError("chunk_bytes must be a positive integer")
-        data = content.encode("utf-8") if isinstance(content, str) else content
+        if isinstance(content, str):
+            data = content.encode("utf-8")
+        elif isinstance(content, bytes):
+            data = content
+        else:
+            raise ContextPackError("content must be str or bytes")
         items: list[bytes] = []
         start = 0
         while start < len(data):

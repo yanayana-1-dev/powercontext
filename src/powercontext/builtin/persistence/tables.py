@@ -453,6 +453,7 @@ SOURCE_LIFECYCLE_NODES_TABLE = Table(
     Column("revision", BigInteger, nullable=False),
     Column("sequence", BigInteger, nullable=False),
     Column("available", Boolean, nullable=False),
+    Column("event_hash", identity_string(64), nullable=True),
     CheckConstraint("revision >= 1", name="ck_pc_source_lifecycle_revision_positive"),
     CheckConstraint("sequence >= 0", name="ck_pc_source_lifecycle_sequence_nonnegative"),
 )
