@@ -82,6 +82,8 @@ dify/
 │   ├── init_seekdb.py             #   seekdb 建表 + 种子数据灌入（现场调用 embedding）
 │   ├── requirements.txt
 │   ├── .env.example               #   配置占位示例（复制为 .env 使用）
+│   ├── tools/
+│   │   └── embed_server.py        #   本地 bge-m3 的 OpenAI 兼容包装（:11435）
 │   └── seed/
 │       ├── lore.jsonl             #   世界设定 39 条（地点/NPC/条例/传说/物品）
 │       └── events_prehistory.jsonl#   纪元1-3年史前事件 10 条
@@ -117,6 +119,8 @@ dify/
 
 以下步骤在本机（Linux/WSL2）实测通过；各服务同机部署，跨机部署时把 `127.0.0.1` 换成对应地址。
 
+> 提示：本仓库为私有报名仓库。若通过大赛测评平台提交后判题机在"执行"阶段克隆失败，需按官方流程在平台"参赛信息"中配置战队账号生成的只读 fine-grained token 地址（`https://<user>:<github_pat_...>@github.com/<owner>/<repo>`），再重新触发提测。
+
 #### ① 启动 seekdb
 
 ```bash
@@ -146,8 +150,11 @@ nohup ~/venvs/mistvale-ai/bin/python -m llama_cpp.server \
 
 ```bash
 python3.12 -m venv ~/venvs/pc-server
+# 源码目录若来自 tarball（无 .git 元数据），先声明版本再 editable 安装：
+export SETUPTOOLS_SCM_PRETEND_VERSION=1.2.0
 ~/venvs/pc-server/bin/pip install -e "powercontext-src[server,cli]"   # 官方源码，pyproject 含 server 附加依赖
-~/venvs/pc-server/bin/pip install "https://files.pythonhosted.org/.../pylibseekdb-1.4.0.post1-cp312-abi3-manylinux_2_28_x86_64.whl" "pymysql==1.1.1"
+# pylibseekdb 不在国内镜像索引，用 files.pythonhosted.org 完整直链：
+~/venvs/pc-server/bin/pip install "https://files.pythonhosted.org/packages/83/06/c39545d88ddec475272991d1c5612f5d5463b843cf29553e5a4ac82ef09e/pylibseekdb-1.4.0.post1-cp312-abi3-manylinux_2_28_x86_64.whl" "pymysql==1.1.1"
 
 export POWERCONTEXT_HOME=$HOME/pc-mistvale
 export POWERCONTEXT_SERVER_DATABASE_KIND=seekdb
@@ -173,8 +180,8 @@ cp .env.example .env           # 按需修改端口/密码；占位值默认同�
 bash bridge_start.sh           # 首次自动建 venv 装依赖，:9010
 curl -s http://127.0.0.1:9010/healthz
 
-# 初始化世界（建 5 张表 + 灌 49 条种子数据，现场调用 embedding）
-python3 init_seekdb.py --drop  # --drop 重置世界；验证脚本见 4.2⑦
+# 初始化世界（建 5 张表 + 灌 49 条种子数据，现场调用 ② 起好的 embedding 服务）
+~/venvs/mistvale-ai/bin/python init_seekdb.py --drop   # --drop 重置世界；只验证语法用 --verify
 ```
 
 #### ⑤ 部署 Dify

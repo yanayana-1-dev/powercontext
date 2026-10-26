@@ -10,4 +10,4 @@ if [ ! -d .venv ]; then
 fi
 # 读取 .env（如存在）
 if [ -f .env ]; then set -a; source .env; set +a; fi
-exec uvicorn bridge:app --host 0.0.0.0 --port "${BRIDGE_PORT:-9010}" --timeout-keep-alive 120
+exec .venv/bin/uvicorn bridge:app --host 0.0.0.0 --port "${BRIDGE_PORT:-9010}" --timeout-keep-alive 120

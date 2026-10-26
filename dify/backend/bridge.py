@@ -31,7 +31,7 @@ SEEKDB_USER = os.environ.get("SEEKDB_USER", "root")
 SEEKDB_PASSWORD = os.environ.get("SEEKDB_PASSWORD", "")
 SEEKDB_DATABASE = os.environ.get("SEEKDB_DATABASE", "test")
 
-EMBEDDING_BASE_URL = os.environ.get("EMBEDDING_BASE_URL", "http://127.0.0.1:11434/v1")
+EMBEDDING_BASE_URL = os.environ.get("EMBEDDING_BASE_URL", "http://127.0.0.1:11435/v1")
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "bge-m3")
 EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "ollama")
 EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", "1024"))
@@ -134,7 +134,7 @@ def recall(req: RecallRequest):
     """
     kw = _keywords(req.keyword or req.query)
     qvec = vec_lit(embed(req.query))
-    out = {"lore": [], "events": [], "recent": [], "sql": []}
+    out = {"lore": [], "events": [], "recent": []}
 
     with db() as conn:
         with conn.cursor() as cur:
