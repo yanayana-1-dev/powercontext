@@ -1,12 +1,12 @@
 # zzd 分支开发说明
 
-本目录记录 `zzd` 分支针对 2026 PowerContext 大赛赛题二至八的设计与验证过程。
+本目录记录 `zzd` 分支针对 2026 PowerContext 大赛赛题二至九的设计与验证过程。
 
 ## 分支基线
 
 - 基线：PowerContext v1.2.0，commit `9db1753434162c0aa7c9f1189a1722e617880a52`
 - 分支：`zzd`
-- 实现范围：仅新增源码、测试与文档；除新增 `prepare_incremental`、数量触发配置/调度与 Embedding 包装器外不修改基线行为
+- 实现范围：在保留基线公共接口与兼容行为的前提下，新增各赛题能力；核心改动集中在 Source、Runtime、Memory/Inference 与 Topic 检索的扩展点
 
 ## 已实现赛题
 
@@ -19,6 +19,7 @@
 | 赛题六 | `context-02-incremental-pack` | `src/powercontext/builtin/runtime/context_pack.py` | [context-02-incremental-pack.md](context-02-incremental-pack.md) |
 | 赛题七 | `processing-01-count-trigger` | `src/powercontext/builtin/runtime/artifact_processing.py` | [processing-01-count-trigger.md](processing-01-count-trigger.md) |
 | 赛题八 | `memory-02-embedding-batches` | `src/powercontext/builtin/inference/coalescing.py` | [memory-02-embedding-batches.md](memory-02-embedding-batches.md) |
+| 赛题九 | `memory-01-source-lifecycle` | `src/powercontext/builtin/runtime/source_lifecycle.py` | [memory-01-source-lifecycle.md](memory-01-source-lifecycle.md) |
 
 ## 交付内容
 
@@ -27,11 +28,14 @@
 - `src/powercontext/sources/pdf_pages.py`：PDF 全页解析、页级 Source、精确证据页检索
 - `src/powercontext/builtin/artifacts/memory/http_reranker.py`：HTTP 分批重排、跨批次全局稳定排序
 - `src/powercontext/builtin/runtime/context_pack.py`：Context Pack/Delta wire 协议、分块、校验与重建
-- `src/powercontext/builtin/runtime/application.py`：`prepare_incremental` 与 capture 后唤醒处理
+- `src/powercontext/builtin/runtime/application.py`：`prepare_incremental`、capture 后唤醒处理与 lifecycle 应用
 - `src/powercontext/builtin/runtime/artifact_processing.py`：按 journal 条目数的自动触发与窗口调度
 - `src/powercontext/builtin/runtime/config.py`：`memory_source_count_threshold` / `topic_memory_source_count_threshold`
 - `src/powercontext/builtin/inference/coalescing.py`：并发 Embedding 合并、LRU 缓存、usage 与取消隔离
-- `tests/`：七道题的产品侧回归测试
+- `src/powercontext/builtin/runtime/source_lifecycle.py`：来源依赖 DAG、事件版本/序号、all/any 传播、generation/audit
+- `src/powercontext/builtin/persistence/tables.py`：`pc_source_lifecycle` 生命周期持久化表
+- `src/powercontext/builtin/persistence/topic_memory.py`：Topic 搜索按生命周期状态过滤
+- `tests/`：八道题的产品侧回归测试
 - `docs/zzd/`：实现与验证记录
 
 ## 验证结果
@@ -45,6 +49,7 @@
 | 官方公开自测 `context-02-incremental-pack` | 14 passed |
 | 官方公开自测 `processing-01-count-trigger` | 17 passed（本地 Windows 需放大 worker 超时；原配置见说明） |
 | 官方公开自测 `memory-02-embedding-batches` | 8 passed |
+| 官方公开自测 `memory-01-source-lifecycle` | 4 passed |
 | 产品回归测试 `tests/test_csv_rows.py` | 16 passed |
 | 产品回归测试 `tests/test_pi_session.py` | 17 passed |
 | 产品回归测试 `tests/test_pdf_pages.py` | 7 passed |
@@ -52,6 +57,7 @@
 | 产品回归测试 `tests/test_context_pack.py` | 9 passed |
 | 产品回归测试 `tests/test_count_trigger.py` | 15 passed |
 | 产品回归测试 `tests/test_coalescing.py` | 7 passed |
+| 产品回归测试 `tests/test_source_lifecycle.py` | 5 passed |
 | 既有 Source 测试 `tests/test_sources.py`、`tests/test_source_observations.py` | 12 passed |
 | `ruff check` / `ruff format --check` | 通过 |
 
@@ -64,3 +70,4 @@
 - 赛题六：wire 字段/Base64/摘要/字节数 oracle、UTF-8 有界分块、任意位置变化与空结果重建、错误 base/prefix/digest、序列化后独立重建，以及 Runtime 首轮 prepare + Memory 追加 + 增量 prepare。
 - 赛题七：严格正整数/默认关闭、重复 capture 不计数、Memory 单窗与剩余数量重判、Topic wave、scope/family 隔离、时间条件 OR、显式 flush、receipt 信任升级、lineage-only Source 计数与排除、重启恢复与写入失败重试。
 - 赛题八：并发去重与原始顺序、batch 上限、空输入、LRU 与缓存关闭、晚到调用共享执行中批次、失败不缓存/可重试、取消隔离、usage 与 token 汇总、向量数量校验、原生向量索引，以及 6 scope / 24 文本 / 4 次底层请求预算与缓存查询。
+- 赛题九：20 节点多层 all/any DAG、撤回/恢复传播、原生 Memory 列表/搜索/Context、Topic 搜索/Context、精确历史引用、generation/audit、事件版本与序号、重放无新 Memory 修订、中断后重试、重启与 scope 隔离。

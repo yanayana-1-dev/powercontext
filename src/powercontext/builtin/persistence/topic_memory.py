@@ -54,6 +54,7 @@ from powercontext.builtin.persistence.supervision import database_utc_now
 from powercontext.builtin.persistence.tables import (
     ARTIFACT_HEADS_TABLE,
     ARTIFACTS_TABLE,
+    SOURCE_LIFECYCLE_TABLE,
     TOPIC_MEMORY_ACTIVE_CHUNKS_TABLE,
     TOPIC_MEMORY_ACTIVE_TOPICS_TABLE,
     TOPIC_MEMORY_RETRIEVAL_SHAPE_TABLE,
@@ -489,9 +490,17 @@ class TopicMemoryRepository:
         channels = await self.index.search(connection, scope_id, request)
         await self._check_retrieval_shape(connection)
         outcome = _fuse_topic_memory_rankings(query, channels, limit, mode=used_mode, admission=admission)
+        inactive = await self._inactive_topics(connection, scope_id)
+        hits = (
+            tuple(
+                hit for hit in outcome.hits if (hit.artifact_ref.artifact_id, hit.artifact_ref.revision) not in inactive
+            )
+            if inactive
+            else outcome.hits
+        )
         return TopicMemorySearchResult(
             mode=used_mode,
-            hits=outcome.hits,
+            hits=hits,
             admission=AdmissionCounts(
                 family=TopicMemory.family,
                 scope_id=scope_id,
@@ -500,6 +509,29 @@ class TopicMemoryRepository:
                 rejected=outcome.rejected,
             ),
         )
+
+    async def _inactive_topics(
+        self,
+        connection: AsyncConnection,
+        scope_id: str,
+    ) -> set[tuple[str, int]]:
+        rows = (
+            await connection.execute(
+                select(
+                    SOURCE_LIFECYCLE_TABLE.c.artifact_id,
+                    SOURCE_LIFECYCLE_TABLE.c.artifact_revision,
+                ).where(
+                    SOURCE_LIFECYCLE_TABLE.c.scope_id == scope_id,
+                    SOURCE_LIFECYCLE_TABLE.c.kind == "topic",
+                    SOURCE_LIFECYCLE_TABLE.c.available.is_(False),
+                )
+            )
+        ).all()
+        return {
+            (str(artifact_id), int(revision))
+            for artifact_id, revision in rows
+            if artifact_id is not None and revision is not None
+        }
 
     async def _activate(
         self,
