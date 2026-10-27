@@ -7,12 +7,13 @@ from . import config, traces
 
 
 def connect(database: str | None = None) -> pymysql.connections.Connection:
+    """database=None 使用配置的默认库；传空字符串则只连服务端（建库等 DDL 用）。"""
     return pymysql.connect(
         host=config.SEEKDB_HOST,
         port=config.SEEKDB_PORT,
         user=config.SEEKDB_USER,
         password=config.SEEKDB_PASSWORD,
-        database=database or config.SEEKDB_DATABASE,
+        database=config.SEEKDB_DATABASE if database is None else database,
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
@@ -35,10 +36,11 @@ def query(sql: str, args: tuple | list | None = None, channel: str = "sql") -> t
     return rows, ms
 
 
-def execute(sql: str, args: tuple | list | None = None, channel: str = "sql") -> int:
-    """执行 DDL/DML，返回 affected rows 并留痕。"""
+def execute(sql: str, args: tuple | list | None = None, channel: str = "sql",
+            database: str | None = None) -> int:
+    """执行 DDL/DML，返回 affected rows 并留痕。database="" 时不选库。"""
     t0 = time.time()
-    conn = connect()
+    conn = connect(database)
     try:
         with conn.cursor() as cur:
             affected = cur.execute(sql, args or ())

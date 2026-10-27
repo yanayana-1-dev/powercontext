@@ -12,9 +12,17 @@ function toast(msg) {
 }
 
 async function api(path, opts) {
-  const resp = await fetch(path, opts);
+  let resp;
+  try {
+    resp = await fetch(path, opts);
+  } catch (e) {
+    throw new Error("网络请求失败：" + e.message);
+  }
   const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+  if (!resp.ok) {
+    const detail = typeof data.detail === "string" ? data.detail : data.detail ? JSON.stringify(data.detail) : "";
+    throw new Error(detail || `HTTP ${resp.status}`);
+  }
   return data;
 }
 
@@ -31,12 +39,12 @@ function switchTab(name) {
 async function loadHealth() {
   try {
     const h = await api("/api/health");
-    const ok = Object.values(h.components).every((v) => v === "ok" || v.startsWith("degraded") === false);
-    const parts = Object.entries(h.components).map(([k, v]) => {
-      const good = v === "ok" || v.startsWith("degraded");
-      return `${k}: <span class="${good ? "pill-ok" : "pill-warn"}">${v}</span>`;
+    const parts = Object.entries(h.components || {}).map(([k, v]) => {
+      const text = String(v);
+      const good = text === "ok" || text.startsWith("degraded");
+      return `${escapeHtml(k)}: <span class="${good ? "pill-ok" : "pill-warn"}">${escapeHtml(text)}</span>`;
     });
-    $("#health-pill").innerHTML = parts.join(" · ");
+    $("#health-pill").innerHTML = parts.join(" · ") || "状态未知";
   } catch (e) {
     $("#health-pill").textContent = "后端未连接";
   }
@@ -85,24 +93,29 @@ async function sendChat() {
 
 function renderChat(r) {
   let html = `<div class="answer">${renderAnswer(r.answer)}</div>`;
-  if (r.memory_saved && r.memory_saved.length) {
+  if (Array.isArray(r.memory_saved) && r.memory_saved.length) {
     html += `<div class="muted" style="margin-top:10px">🧠 已沉淀到工作记忆（PowerContext）：` +
       r.memory_saved.map((m) => `<span class="badge mem">${escapeHtml(m.kind)}</span>`).join(" ") + `</div>`;
   }
   if (!r.llm_used) html += `<div class="muted" style="margin-top:8px">LLM 未接入，当前为纯检索模式（seekdb 检索正常）。</div>`;
   $("#answer-box").innerHTML = html;
 
-  $("#sources-box").innerHTML = (r.citations || []).map((c) => `
+  const elapsed = r.retrieval && r.retrieval.elapsed_ms;
+  const timing = Number.isFinite(elapsed)
+    ? `<div class="muted" style="margin-bottom:6px">混合检索完成，耗时 ${elapsed} ms</div>`
+    : "";
+  const sources = (Array.isArray(r.citations) ? r.citations : []).map((c) => `
     <div class="source-item">
       <div class="head"><b>[${c.n}] ${escapeHtml(c.doc_title)}</b>
         ${c.heading ? `<span class="badge">${escapeHtml(c.heading)}</span>` : ""}
-        ${c.channels.map((ch) => `<span class="badge ${ch === "hybrid" ? "hyb" : ch === "vector" ? "vec" : "rec"}">${ch}</span>`).join("")}
+        ${(c.channels || []).map((ch) => `<span class="badge ${ch === "hybrid" ? "hyb" : ch === "vector" ? "vec" : "rec"}">${ch}</span>`).join("")}
         ${c.distance != null ? `<span class="muted">l2=${c.distance}</span>` : ""}
       </div>
-      <div class="body">${escapeHtml((r.retrieval.channels.hybrid.concat(r.retrieval.channels.vector, r.retrieval.channels.recent).find((x) => x.chunk_id === c.chunk_id) || {}).preview || "")}…</div>
+      <div class="body">${escapeHtml(c.preview || "")}…</div>
     </div>`).join("") || `<div class="empty">没有检索到相关资料</div>`;
+  $("#sources-box").innerHTML = timing + sources;
 
-  if (r.memory_recalled && r.memory_recalled.length) {
+  if (Array.isArray(r.memory_recalled) && r.memory_recalled.length) {
     $("#recalled-box").style.display = "";
     $("#recalled-list").innerHTML = r.memory_recalled.map((h) =>
       `<div class="memory-item"><span class="kind">${escapeHtml(h.kind)}</span>${escapeHtml(h.text)}</div>`).join("");
@@ -127,15 +140,37 @@ async function loadDocs() {
         <td>${escapeHtml(doc.tags).split(/[,，]/).filter(Boolean).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</td>
         <td>${doc.n_chunks}</td>
         <td class="muted">${escapeHtml(doc.created_at || "")}</td>
-        <td><button class="ghost" onclick="delDoc(${doc.id})">删除</button></td>
+        <td>
+          <button class="ghost" data-action="export" data-id="${doc.id}">导出</button>
+          <button class="ghost" data-action="delete" data-id="${doc.id}">删除</button>
+        </td>
       </tr>`).join("") || `<tr><td colspan="5" class="empty">还没有资料，先在下方导入。</td></tr>`;
   } catch (e) { toast("加载资料失败：" + e.message); }
 }
 
 async function delDoc(id) {
-  await api(`/api/documents/${id}`, { method: "DELETE" });
-  toast("已删除");
-  loadDocs();
+  if (!confirm("确定删除这篇资料？删除后需要重新导入。")) return;
+  try {
+    await api(`/api/documents/${id}`, { method: "DELETE" });
+    toast("已删除");
+    loadDocs();
+  } catch (e) { toast("删除失败：" + e.message); }
+}
+
+async function exportDoc(id) {
+  try {
+    const d = await api(`/api/documents/${id}/chunks`);
+    const blob = new Blob([JSON.stringify(d, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safeFileName(d.document && d.document.title)}-${id}-chunks.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    toast(`已导出 ${(d.chunks || []).length} 个分块`);
+  } catch (e) { toast("导出失败：" + e.message); }
 }
 
 async function ingestFile() {
@@ -146,7 +181,7 @@ async function ingestFile() {
   saveUser();
   if (f) {
     if (!title) { toast("请先填标题"); return; }
-    content = await f.text();
+    try { content = await f.text(); } catch (e) { toast("读取文件失败：" + e.message); return; }
   }
   if (!title || !content) { toast("标题和内容都要有"); return; }
   const btn = $("#doc-submit");
@@ -197,6 +232,10 @@ function saveUser() {
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+function safeFileName(s) {
+  const cleaned = String(s || "document").replace(/[\\/:*?"<>|\r\n\t]+/g, "_").trim().slice(0, 80);
+  return cleaned || "document";
+}
 
 window.addEventListener("DOMContentLoaded", () => {
   $("#user-input").value = state.user;
@@ -205,6 +244,14 @@ window.addEventListener("DOMContentLoaded", () => {
   $("#chat-send").addEventListener("click", sendChat);
   $("#chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) sendChat(); });
   $("#doc-submit").addEventListener("click", ingestFile);
+  $("#docs-tbody").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    if (!Number.isInteger(id)) return;
+    if (btn.dataset.action === "delete") delDoc(id);
+    else if (btn.dataset.action === "export") exportDoc(id);
+  });
   $("#health-pill").addEventListener("click", loadHealth);
   loadHealth();
   loadWelcome();

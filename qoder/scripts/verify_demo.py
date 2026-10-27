@@ -27,7 +27,7 @@ def main():
     user = "验证员小赛"
 
     # ---- 步骤 0：健康检查（四个组件）----
-    h = requests.get(f"{APP}/api/health", timeout=30).json()
+    h = requests.get(f"{APP}/api/health", timeout=120).json()
     step("健康检查：seekdb/embedding/powercontext 就绪",
          "seekdb=ok, embedding=ok, powercontext=ok（llm 允许降级）",
          json.dumps(h["components"], ensure_ascii=False),
@@ -35,7 +35,7 @@ def main():
          and h["components"]["powercontext"] == "ok")
 
     # ---- 样例 1：混合检索命中资料 ----
-    r1 = requests.post(f"{APP}/api/chat", json={"question": "报销流程是什么？逾期提交会怎样？", "user": user}, timeout=300).json()
+    r1 = requests.post(f"{APP}/api/chat", json={"question": "报销流程是什么？逾期提交会怎样？", "user": user}, timeout=600).json()
     docs = {c["doc_title"] for c in r1["citations"]}
     step("样例1：提问报销流程 → 命中《差旅与报销制度》",
          "citations 含 '差旅与报销制度（2026年10月修订版）'",
@@ -49,7 +49,7 @@ def main():
     # ---- 样例 2：记忆写入 PowerContext ----
     r2 = requests.post(f"{APP}/api/chat", json={
         "question": "记住：我们组的检索服务叫星桥，下周三要做压测第二轮，目标 P99 300ms 以内。",
-        "user": user}, timeout=300).json()
+        "user": user}, timeout=600).json()
     saved = r2.get("memory_saved") or []
     step("样例2：告知事项 → 记忆写入 PowerContext（memory_saved 非空）",
          "memory_saved ≥ 1 条，含 task/note 类记忆",
@@ -58,7 +58,7 @@ def main():
 
     # ---- 样例 3：跨会话记忆复用（新会话再问，应想起星桥压测）----
     time.sleep(1)
-    r3 = requests.post(f"{APP}/api/chat", json={"question": "我下周的工作安排里压测是哪天？目标多少？", "user": user}, timeout=300).json()
+    r3 = requests.post(f"{APP}/api/chat", json={"question": "我下周的工作安排里压测是哪天？目标多少？", "user": user}, timeout=600).json()
     recalled_text = json.dumps(r3.get("memory_recalled") or [], ensure_ascii=False)
     answer_has = ("星桥" in r3["answer"]) or ("300" in r3["answer"]) or ("周三" in r3["answer"])
     step("样例3：新会话提问 → PowerContext 记忆被召回并用于回答",

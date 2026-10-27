@@ -31,7 +31,8 @@ def enabled(force_check: bool = False) -> bool:
             return _state["ok"]
     ok = False
     try:
-        resp = _SESSION.get(f"{config.LLM_BASE_URL.rstrip('/')}/models", timeout=4)
+        # 探测超时给足 15s：本地 llama 生成忙时 /models 也会排队，4s 会误判为未接入
+        resp = _SESSION.get(f"{config.LLM_BASE_URL.rstrip('/')}/models", timeout=15)
         ok = resp.status_code == 200
     except requests.RequestException:
         ok = False

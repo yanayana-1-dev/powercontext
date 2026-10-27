@@ -115,6 +115,16 @@ ul { padding-left:22px; }
   </section>
 
   <section>
+    <h2>常见问题</h2>
+    <div class="problems">
+      <div class="problem"><b>seekdb 连不上？</b>先确认 2881 端口与账号密码（<span class="inline-code">SEEKDB_*</span> 环境变量）。seekdb 首次启动要先 bootstrap，约需 1-2 分钟，这段时间连接失败属正常现象。</div>
+      <div class="problem"><b>入库报 503「embedding 不可用」？</b>嵌入服务没启动，或返回维度与 <span class="inline-code">EMBED_DIM</span> 不一致。注意：换嵌入模型必须清空重建（删除 seekmem 库重新 seed），否则新旧向量不在同一空间、检索会失真。</div>
+      <div class="problem"><b>PowerContext 健康检查显示 degraded？</b><span class="inline-code">/health/ready</span> 里 <span class="inline-code">inference.embedding</span> 超时通常是嵌入服务没起。此时记忆的语义检索会退化，但 remember / entries 仍可用。</div>
+      <div class="problem"><b>LLM 回答很慢？</b>本地 3B 模型在 CPU 上约 30-90 秒/次，云端 API 则秒级。生成期间可以切到其他页签；完全不接 LLM 也能跑，问答会自动降级为纯检索摘要。</div>
+    </div>
+  </section>
+
+  <section>
     <h2>代码与复现</h2>
     <p>完整源码（应用 + 运行手册 + 验证样例 + 实测留档）在大赛仓库 <span class="inline-code">powercontext</span> 的 <span class="inline-code">2026-competition-ecosystem</span> 基线上：<b>qoder/ 目录，分支 crq-ecosystem</b>。</p>
     <pre>git clone https://github.com/yanayana-1-dev/powercontext.git

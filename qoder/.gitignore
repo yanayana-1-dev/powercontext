@@ -3,3 +3,5 @@ __pycache__/
 .env
 evidence_server.log
 *.log
+.publish-check/
+.seekmem-showcase.qoder.site

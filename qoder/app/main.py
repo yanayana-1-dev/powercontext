@@ -6,7 +6,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -80,6 +80,14 @@ def api_documents():
     return {"documents": ingest.list_documents()}
 
 
+@app.get("/api/documents/{doc_id}/chunks")
+def api_document_chunks(doc_id: int):
+    doc = ingest.get_document(doc_id)
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    return {"document": doc, "chunks": ingest.list_chunks(doc_id)}
+
+
 @app.delete("/api/documents/{doc_id}")
 def api_delete_document(doc_id: int):
     ingest.delete_document(doc_id)
@@ -108,7 +116,7 @@ def api_search(body: ChatBody):
 # ---------- 记忆 ----------
 
 @app.get("/api/memory")
-def api_memory(user: str):
+def api_memory(user: str = Query(..., min_length=1, max_length=64)):
     scope = memory.ensure_scope(user)
     scope_id = scope.get("scope_id", "")
     welcome = memory.search(scope_id, "当前进行中的事项 未完成的任务 最近确认的结论", limit=5) if scope_id else []
@@ -119,7 +127,7 @@ def api_memory(user: str):
 # ---------- 证据 ----------
 
 @app.get("/api/traces")
-def api_traces(limit: int = 30):
+def api_traces(limit: int = Query(default=30, ge=1, le=200)):
     return {
         "sql": traces.tail("sql_trace.jsonl", limit),
         "retrieval": traces.tail("retrieval_trace.jsonl", limit),

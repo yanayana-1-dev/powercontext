@@ -54,15 +54,23 @@ def split_chunks(text: str) -> list[dict]:
 
 
 def ingest_document(title: str, source: str, tags: str, content: str) -> dict:
-    """写入/更新一篇文档：删除旧版本 → 分块 → 向量化 → 双表落库。"""
+    """写入/更新一篇文档：先向量化，再在同一事务内替换文档与分块。"""
     title = (title or "").strip() or "未命名文档"
     tags = (tags or "").strip()
     chunks = split_chunks(content)
     if not chunks:
         return {"ok": False, "error": "文档太短，切分后没有有效段落"}
 
+    embed_inputs = [
+        f"{title}\n{c['heading']}\n{c['content']}" if c["heading"] else f"{title}\n{c['content']}"
+        for c in chunks
+    ]
+    # 先完成向量化：embedding 服务失败时直接抛 EmbedError（503），库里不会留下半篇文档
+    vecs = embed.embed_texts(embed_inputs)
+
     conn = db.connect()
     try:
+        conn.autocommit(False)
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM sm_documents WHERE title=%s", (title,))
             old = cur.fetchone()
@@ -74,23 +82,16 @@ def ingest_document(title: str, source: str, tags: str, content: str) -> dict:
                 (title, source, tags, len(chunks)),
             )
             doc_id = cur.lastrowid
-            embed_texts = [
-                f"{title}\n{c['heading']}\n{c['content']}" if c["heading"] else f"{title}\n{c['content']}"
-                for c in chunks
-            ]
-    finally:
-        conn.close()
-
-    vecs = embed.embed_texts(embed_texts)
-    conn = db.connect()
-    try:
-        with conn.cursor() as cur:
-            for seq, (c, v) in enumerate(zip(chunks, vecs)):
+            for seq, (chunk, vec) in enumerate(zip(chunks, vecs)):
                 cur.execute(
                     "INSERT INTO sm_chunks (doc_id, seq, doc_title, source, tags, heading, content, embedding) "
                     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (doc_id, seq, title, source, tags, c["heading"], c["content"], json_vec(v)),
+                    (doc_id, seq, title, source, tags, chunk["heading"], chunk["content"], json_vec(vec)),
                 )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
     traces.record("retrieval_trace.jsonl", {
@@ -104,6 +105,32 @@ def list_documents() -> list[dict]:
     rows, _ = db.query(
         "SELECT id, title, source, tags, n_chunks, created_at FROM sm_documents ORDER BY id DESC",
         channel="documents.list",
+    )
+    for r in rows:
+        if isinstance(r.get("created_at"), datetime):
+            r["created_at"] = r["created_at"].strftime("%Y-%m-%d %H:%M")
+    return rows
+
+
+def get_document(doc_id: int) -> dict | None:
+    rows, _ = db.query(
+        "SELECT id, title, source, tags, n_chunks, created_at FROM sm_documents WHERE id=%s",
+        (doc_id,), channel="documents.get",
+    )
+    if not rows:
+        return None
+    doc = rows[0]
+    if isinstance(doc.get("created_at"), datetime):
+        doc["created_at"] = doc["created_at"].strftime("%Y-%m-%d %H:%M")
+    return doc
+
+
+def list_chunks(doc_id: int) -> list[dict]:
+    """按 seq 返回分块（SELECT 显式排除 embedding 向量列）。"""
+    rows, _ = db.query(
+        "SELECT id, doc_id, seq, heading, content, created_at FROM sm_chunks "
+        "WHERE doc_id=%s ORDER BY seq ASC, id ASC",
+        (doc_id,), channel="documents.chunks",
     )
     for r in rows:
         if isinstance(r.get("created_at"), datetime):

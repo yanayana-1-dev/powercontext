@@ -21,10 +21,10 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         )
         resp.raise_for_status()
         data = resp.json()["data"]
-    except requests.RequestException as exc:
-        raise EmbedError(f"embedding 服务不可用（{config.EMBED_BASE_URL}）: {exc}") from exc
-    data.sort(key=lambda d: d.get("index", 0))
-    vecs = [d["embedding"] for d in data]
+        data.sort(key=lambda d: d.get("index", 0))
+        vecs = [d["embedding"] for d in data]
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        raise EmbedError(f"embedding 服务不可用或返回格式异常（{config.EMBED_BASE_URL}）: {exc}") from exc
     for v in vecs:
         if len(v) != config.EMBED_DIM:
             raise EmbedError(f"embedding 维度不符: got {len(v)}, expect {config.EMBED_DIM}")

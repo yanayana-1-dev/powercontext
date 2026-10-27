@@ -17,3 +17,19 @@
 {"ts": "2026-10-27T09:08:37", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 29507, "prompt_roles": ["system", "user"], "output_chars": 154}
 {"ts": "2026-10-27T09:08:44", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 6730, "prompt_roles": ["system", "user"], "output_chars": 111}
 {"ts": "2026-10-27T09:08:45", "kind": "chat.turn", "user": "评审体验员", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": true, "citations": 6, "memory_recalled": 4, "memory_saved": ["mem_ent_d6d76b8863c94ae0932b381d3a6f7c9a"]}
+{"ts": "2026-10-27T10:18:47", "kind": "chat.turn", "user": "qa-check", "question": "报销流程怎么走？", "llm_used": false, "citations": 6, "memory_recalled": 0, "memory_saved": []}
+{"ts": "2026-10-27T10:20:33", "kind": "chat.turn", "user": "guest", "question": "报销流程怎么走？", "llm_used": false, "citations": 6, "memory_recalled": 0, "memory_saved": []}
+{"ts": "2026-10-27T10:21:45", "kind": "chat.turn", "user": "guest", "question": "报销流程怎么走？", "llm_used": false, "citations": 6, "memory_recalled": 0, "memory_saved": []}
+{"ts": "2026-10-27T10:38:10", "kind": "chat.turn", "user": "验证员小赛", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": false, "citations": 6, "memory_recalled": 4, "memory_saved": []}
+{"ts": "2026-10-27T10:46:22", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 323918, "prompt_roles": ["system", "user"], "output_chars": 146}
+{"ts": "2026-10-27T10:46:50", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 27393, "prompt_roles": ["system", "user"], "output_chars": 143}
+{"ts": "2026-10-27T10:47:02", "kind": "chat.turn", "user": "验证员小赛", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": true, "citations": 6, "memory_recalled": 4, "memory_saved": ["mem_ent_8fd3f156809b4763b4fe7aca3456359f"]}
+{"ts": "2026-10-27T10:49:30", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 130353, "prompt_roles": ["system", "user"], "output_chars": 192}
+{"ts": "2026-10-27T10:49:58", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 28292, "prompt_roles": ["system", "user"], "output_chars": 133}
+{"ts": "2026-10-27T10:50:09", "kind": "chat.turn", "user": "预热员", "question": "报销流程是什么？", "llm_used": true, "citations": 6, "memory_recalled": 0, "memory_saved": ["mem_ent_cc66665aa48e4800a91a7fbc882100b6", "mem_ent_2ca8274033a541e887fb1158575279c7"]}
+{"ts": "2026-10-27T10:58:02", "kind": "chat.turn", "user": "验证员小赛", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": false, "citations": 6, "memory_recalled": 4, "memory_saved": []}
+{"ts": "2026-10-27T10:58:36", "kind": "chat.turn", "user": "验证员小赛", "question": "记住：我们组的检索服务叫星桥，下周三要做压测第二轮，目标 P99 300ms 以内。", "llm_used": false, "citations": 6, "memory_recalled": 4, "memory_saved": []}
+{"ts": "2026-10-27T10:58:53", "kind": "chat.turn", "user": "验证员小赛", "question": "我下周的工作安排里压测是哪天？目标多少？", "llm_used": false, "citations": 6, "memory_recalled": 4, "memory_saved": []}
+{"ts": "2026-10-27T11:07:05", "kind": "chat.turn", "user": "验证员小赛", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": false, "citations": 6, "memory_recalled": 4, "memory_saved": []}
+{"ts": "2026-10-27T11:07:28", "kind": "chat.turn", "user": "验证员小赛", "question": "记住：我们组的检索服务叫星桥，下周三要做压测第二轮，目标 P99 300ms 以内。", "llm_used": false, "citations": 6, "memory_recalled": 4, "memory_saved": []}
+{"ts": "2026-10-27T11:07:51", "kind": "chat.turn", "user": "验证员小赛", "question": "我下周的工作安排里压测是哪天？目标多少？", "llm_used": false, "citations": 6, "memory_recalled": 4, "memory_saved": []}

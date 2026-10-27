@@ -59,7 +59,7 @@ def answer(question: str, user: str) -> dict:
         "citations": [
             {"n": r["final_rank"], "doc_title": r["doc_title"], "heading": r["heading"],
              "source": r["source"], "chunk_id": r["chunk_id"], "channels": r["channels"],
-             "distance": r["distance"]}
+             "distance": r["distance"], "preview": r["preview"]}
             for r in hits
         ],
         "retrieval": {"channels": ret["channels"], "elapsed_ms": ret["elapsed_ms"]},
@@ -78,9 +78,9 @@ def answer(question: str, user: str) -> dict:
 def _compose(question: str, user: str, recalled: list[dict], hits: list[dict]) -> str:
     mem_lines = [f"- ({h['kind']}) {h['text']}" for h in recalled] or ["- （暂无相关记忆）"]
     doc_lines = []
-    for r in hits[:5]:
+    for r in hits[:4]:
         head = f"{r['doc_title']}" + (f" · {r['heading']}" if r["heading"] else "")
-        doc_lines.append(f"[{r['final_rank']}] {head}\n{r['content'][:420]}")
+        doc_lines.append(f"[{r['final_rank']}] {head}\n{r['content'][:360]}")
     user_prompt = (
         f"【工作记忆】（PowerContext 中关于 {user} 的记忆）\n" + "\n".join(mem_lines)
         + f"\n\n【资料检索结果】（seekdb 混合检索，共 {len(hits)} 段）\n" + "\n\n".join(doc_lines)

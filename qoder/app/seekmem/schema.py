@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS {db}.sm_users (
 
 
 def ensure_schema() -> None:
-    db.execute(DDL_DATABASE.format(db=config_db()), channel="schema")
+    # 首次启动目标库可能尚不存在，先用不选库的服务端连接建库
+    db.execute(DDL_DATABASE.format(db=config_db()), channel="schema", database="")
     db.execute(DDL_DOCUMENTS.format(db=config_db()), channel="schema")
     from . import config
     db.execute(DDL_CHUNKS.format(db=config_db(), dim=config.EMBED_DIM), channel="schema")
