@@ -1,0 +1,19 @@
+{"ts": "2026-10-27T08:33:26", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 45509, "prompt_roles": ["system", "user"], "output_chars": 176}
+{"ts": "2026-10-27T08:34:00", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 34092, "prompt_roles": ["system", "user"], "output_chars": 143}
+{"ts": "2026-10-27T08:34:03", "kind": "chat.turn", "user": "验证员小赛", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": true, "citations": 6, "memory_recalled": 4, "memory_saved": ["mem_ent_cc8da673610548e3a8ea8896bbd495f6", "mem_ent_962d15daf91d4a67a3eb449655146c17"]}
+{"ts": "2026-10-27T08:34:59", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 54068, "prompt_roles": ["system", "user"], "output_chars": 128}
+{"ts": "2026-10-27T08:35:13", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 14023, "prompt_roles": ["system", "user"], "output_chars": 108}
+{"ts": "2026-10-27T08:35:14", "kind": "chat.turn", "user": "验证员小赛", "question": "记住：我们组的检索服务叫星桥，下周三要做压测第二轮，目标 P99 300ms 以内。", "llm_used": true, "citations": 6, "memory_recalled": 4, "memory_saved": ["mem_ent_057ec1aaef8a4d19aad40e81c95f72dd", "mem_ent_19d8f8ada391467eb62a386217ed1517"]}
+{"ts": "2026-10-27T08:35:57", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 40562, "prompt_roles": ["system", "user"], "output_chars": 44}
+{"ts": "2026-10-27T08:36:06", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 8597, "prompt_roles": ["system", "user"], "output_chars": 47}
+{"ts": "2026-10-27T08:36:06", "kind": "chat.turn", "user": "验证员小赛", "question": "我下周的工作安排里压测是哪天？目标多少？", "llm_used": true, "citations": 6, "memory_recalled": 4, "memory_saved": [""]}
+{"ts": "2026-10-27T08:48:33", "kind": "chat.turn", "user": "评审体验员", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": false, "citations": 6, "memory_recalled": 0, "memory_saved": []}
+{"ts": "2026-10-27T09:04:18", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 25012, "prompt_roles": ["system", "user"], "output_chars": 131}
+{"ts": "2026-10-27T09:04:32", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 13544, "prompt_roles": ["system", "user"], "output_chars": 91}
+{"ts": "2026-10-27T09:04:33", "kind": "chat.turn", "user": "评审体验员", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": true, "citations": 6, "memory_recalled": 0, "memory_saved": ["mem_ent_3657eacc06d44d04adabeedd4f30cd4e", "mem_ent_c50d8f0a2e3849ffa9397fc6941cc668"]}
+{"ts": "2026-10-27T09:06:28", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 39699, "prompt_roles": ["system", "user"], "output_chars": 245}
+{"ts": "2026-10-27T09:06:56", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 27290, "prompt_roles": ["system", "user"], "output_chars": 117}
+{"ts": "2026-10-27T09:06:58", "kind": "chat.turn", "user": "评审体验员", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": true, "citations": 6, "memory_recalled": 2, "memory_saved": ["mem_ent_e37c588431de408f82b75955de306a8c", "mem_ent_cfb3ec5916e94dc4a0822d83e0e91074"]}
+{"ts": "2026-10-27T09:08:37", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 29507, "prompt_roles": ["system", "user"], "output_chars": 154}
+{"ts": "2026-10-27T09:08:44", "kind": "llm", "model": "qwen2.5-3b-instruct", "elapsed_ms": 6730, "prompt_roles": ["system", "user"], "output_chars": 111}
+{"ts": "2026-10-27T09:08:45", "kind": "chat.turn", "user": "评审体验员", "question": "报销流程是什么？逾期提交会怎样？", "llm_used": true, "citations": 6, "memory_recalled": 4, "memory_saved": ["mem_ent_d6d76b8863c94ae0932b381d3a6f7c9a"]}

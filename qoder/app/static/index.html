@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeekMem · 追忆工作台</title>
+<link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="logo-row">
+      <h1>SeekMem · 追忆工作台</h1>
+      <span class="sub">seekdb 帮你找到 · PowerContext 帮你记住</span>
+      <span class="health-pill" id="health-pill" title="点击刷新">健康检查中…</span>
+    </div>
+    <div class="user-row">
+      <label for="user-input">工位（用户）：</label>
+      <input id="user-input" type="text" maxlength="32" placeholder="你的名字或工号">
+      <span class="sub">不同工位的记忆互相隔离</span>
+    </div>
+    <nav class="tabs">
+      <button data-tab="chat" class="active">问答</button>
+      <button data-tab="docs">资料库</button>
+      <button data-tab="memory">记忆</button>
+      <button data-tab="evidence">证据</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- 问答 -->
+  <section class="view active" id="view-chat">
+    <div class="card welcome" id="welcome" style="display:none">
+      <div id="welcome-list"></div>
+    </div>
+    <div class="card">
+      <h2>向你的资料库提问 <span class="hint">seekdb 混合检索（向量 + 全文 + 结构化）· Ctrl+Enter 发送</span></h2>
+      <div class="chat-q">
+        <textarea id="chat-input" placeholder="例如：上次关于报销流程的会议定了什么？"></textarea>
+        <button class="primary" id="chat-send">提问</button>
+      </div>
+      <div id="answer-box" style="margin-top:14px"></div>
+      <div id="recalled-box" style="display:none; margin-top:12px">
+        <div class="muted" style="margin-bottom:4px">🧠 本次从 PowerContext 想起的记忆：</div>
+        <div id="recalled-list"></div>
+      </div>
+      <div class="sources" id="sources-box"></div>
+    </div>
+  </section>
+
+  <!-- 资料库 -->
+  <section class="view" id="view-docs">
+    <div class="card">
+      <h2>已入库资料 <span class="hint">存于 seekdb：VECTOR(1024) + HNSW 向量索引 + IK 全文索引</span></h2>
+      <table>
+        <thead><tr><th>标题</th><th>标签</th><th>分块</th><th>入库时间</th><th></th></tr></thead>
+        <tbody id="docs-tbody"></tbody>
+      </table>
+    </div>
+    <div class="card doc-form">
+      <h2>导入资料 <span class="hint">Markdown / 纯文本；同名标题重新导入即更新；也可直接选文件</span></h2>
+      <div class="form-row">
+        <input type="text" id="doc-title" placeholder="标题（必填）">
+        <input type="text" id="doc-tags" placeholder="标签，逗号分隔，如：周报, 项目A">
+      </div>
+      <div class="form-row">
+        <input type="file" id="doc-file" accept=".md,.txt,.markdown">
+      </div>
+      <textarea id="doc-content" placeholder="或在下方粘贴正文…（选了文件则忽略此处）&#10;支持 Markdown 标题，会按标题智能分块"></textarea>
+      <div style="margin-top:10px"><button class="primary" id="doc-submit">导入资料库</button></div>
+    </div>
+  </section>
+
+  <!-- 记忆 -->
+  <section class="view" id="view-memory">
+    <div class="card">
+      <h2>PowerContext 记忆面板 <span class="hint">scope：<span id="mem-scope">…</span></span></h2>
+      <p class="muted" style="margin-bottom:10px">这里展示 PowerContext 为当前工位保存的全部活跃记忆。问答中确认的结论、决定、待办、偏好会被自动沉淀；换个工位互不可见。</p>
+      <div id="mem-entries"></div>
+    </div>
+  </section>
+
+  <!-- 证据 -->
+  <section class="view" id="view-evidence">
+    <div class="card">
+      <h2>seekdb 查询留痕 <span class="hint">evidence/sql_trace.jsonl</span></h2>
+      <div class="trace-box" id="trace-sql"></div>
+    </div>
+    <div class="card">
+      <h2>检索融合留痕 <span class="hint">evidence/retrieval_trace.jsonl</span></h2>
+      <div class="trace-box" id="trace-retrieval"></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h2>记忆读写留痕 <span class="hint">memory_trace.jsonl</span></h2>
+        <div class="trace-box" id="trace-memory"></div>
+      </div>
+      <div class="card">
+        <h2>问答轮次留痕 <span class="hint">chat_trace.jsonl</span></h2>
+        <div class="trace-box" id="trace-chat"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="/static/app.js?v=2"></script>
+</body>
+</html>

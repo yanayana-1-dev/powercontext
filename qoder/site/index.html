@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeekMem · 追忆工作台 — seekdb 帮你找到，PowerContext 帮你记住</title>
+<style>
+:root { --brand:#3b5bdb; --ink:#1c2333; --muted:#6b7280; --line:#e5e9f2; --soft:#eef2ff; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif; color:var(--ink); line-height:1.75; background:#f5f7fb; }
+header { background:linear-gradient(120deg,#1e2a5a,#3b5bdb 85%); color:#fff; padding:56px 24px 72px; text-align:center; }
+header h1 { font-size:34px; letter-spacing:1px; }
+header p.sub { margin-top:10px; font-size:17px; opacity:.9; }
+header p.tag { margin-top:18px; font-size:13px; opacity:.75; }
+.badges { margin-top:22px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.badge { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.4); border-radius:999px; padding:6px 16px; font-size:13px; }
+main { max-width:1000px; margin:-40px auto 0; padding:0 20px 80px; }
+section { background:#fff; border:1px solid var(--line); border-radius:16px; padding:32px; margin-bottom:24px; box-shadow:0 6px 24px rgba(28,35,51,.06); }
+h2 { color:var(--brand); font-size:22px; margin-bottom:16px; }
+h3 { font-size:16px; margin:18px 0 8px; }
+p.mods { color:var(--muted); }
+.problems { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:760px){ .problems{grid-template-columns:1fr;} }
+.problem { background:#fafbff; border:1px solid var(--line); border-radius:12px; padding:18px; }
+.problem b { color:var(--brand); }
+.features { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:760px){ .features{grid-template-columns:1fr;} }
+.feature { background:#fafbff; border:1px solid var(--line); border-radius:12px; padding:18px; }
+.feature .no { display:inline-block; background:var(--soft); color:var(--brand); font-weight:700; border-radius:8px; padding:2px 10px; margin-bottom:8px; }
+.shot { margin:26px 0 6px; }
+.shot img { width:100%; border:1px solid var(--line); border-radius:12px; display:block; }
+.shot figcaption { text-align:center; color:var(--muted); font-size:13px; margin-top:8px; }
+table { width:100%; border-collapse:collapse; font-size:14px; margin-top:10px; }
+th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:500; }
+code, pre { font-family:"JetBrains Mono",Consolas,monospace; font-size:13px; }
+pre { background:#10162b; color:#d6e2ff; border-radius:10px; padding:14px 16px; overflow-x:auto; margin:10px 0; }
+.inline-code { background:var(--soft); color:var(--brand); border-radius:5px; padding:1px 7px; }
+a.btn { display:inline-block; background:var(--brand); color:#fff; text-decoration:none; border-radius:10px; padding:10px 22px; font-size:15px; margin-right:10px; }
+a.btn.ghost { background:transparent; color:var(--brand); border:1.5px solid var(--brand); }
+ul { padding-left:22px; }
+.footer { text-align:center; color:var(--muted); font-size:13px; padding:0 20px 48px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SeekMem · 追忆工作台</h1>
+  <p class="sub">seekdb 帮你找到 · PowerContext 帮你记住</p>
+  <p class="tag">2026 OceanBase 大赛 · 生态赛道 Qoder 题（Build with Qoder）参赛作品 · 用 Qoder 开发 · Qoder Sites 发布</p>
+  <div class="badges">
+    <span class="badge">seekdb v1.4.0 · 向量/全文/结构化混合检索</span>
+    <span class="badge">PowerContext v1.2.0 · 工位记忆</span>
+    <span class="badge">bge-m3 · 1024 维嵌入</span>
+    <span class="badge">LLM 可选 · 自动降级</span>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>解决什么问题</h2>
+    <div class="problems">
+      <div class="problem"><b>找不到。</b>资料散落在笔记、周报、会议纪要、实验记录里。字面搜索搜不到语义相关的内容——搜"报销怎么走"，找不到写着"财务审核流程"的文档。SeekMem 把资料导入 seekdb，用<b>向量 + IK 全文 + 结构化条件</b>的混合检索（单条 SQL 完成）把相关段落带出处找回来。</div>
+      <div class="problem"><b>接不上。</b>第二天回来，忘了上次进行到哪、定了什么，每次都要从零交代背景。SeekMem 为每个工位（用户）在 PowerContext 里维护独立记忆：事项、结论、偏好自动沉淀，<b>跨会话"想起来"并注入后续回答</b>；工位之间互相隔离。</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>核心功能</h2>
+    <div class="features">
+      <div class="feature"><span class="no">1</span><h3>资料库</h3><p class="mods">Markdown/文本导入 → 按标题智能分块 → bge-m3 向量化 → 存入 seekdb（<span class="inline-code">VECTOR(1024)</span> HNSW 向量索引 + IK 全文索引 + 结构化列，一表三类检索维度）。</p></div>
+      <div class="feature"><span class="no">2</span><h3>混合检索问答</h3><p class="mods">三路召回（纯向量 / <b>单语句混合检索</b> / 最近资料）+ RRF 融合 → LLM 综合回答带 <span class="inline-code">[n]</span> 引用；每条引用标注命中通道与 l2 距离。</p></div>
+      <div class="feature"><span class="no">3</span><h3>工位记忆（PowerContext）</h3><p class="mods">每轮自动提炼 0-2 条记忆（note/decision/task/preference）写入对应 scope；下次打开欢迎横幅"想起来了"，回答自动带上你的背景。</p></div>
+      <div class="feature"><span class="no">4</span><h3>证据留痕</h3><p class="mods">每次 seekdb SQL、检索融合、记忆读写、问答轮次逐条写入 <span class="inline-code">evidence/*.jsonl</span> 并在工作台「证据」页可视化——技术是否实际起作用，看留痕不靠口说。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>实际运行效果（2026-10-27 实测截图）</h2>
+    <p class="mods">以下截图来自本机运行的工作台（10 篇种子资料已入库，LLM 为本地 qwen2.5-3B）。</p>
+    <figure class="shot">
+      <img src="screenshots/02-chat-answer.png" alt="问答页：欢迎横幅 + 综合回答 + 引用">
+      <figcaption>问答页：回来时横幅"从工作记忆想起来了"；提问报销流程，回答带引用来源、通道徽章（vector/hybrid/recent）与 l2 距离；本轮结论自动沉淀回 PowerContext</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="screenshots/03-memory-panel.png" alt="记忆面板">
+      <figcaption>记忆面板：PowerContext 中该工位的全部活跃记忆（事项/决定/结论），scope ID 可核对</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="screenshots/04-docs.png" alt="资料库">
+      <figcaption>资料库：10 篇示例资料（制度/周报/纪要/调研/实验记录），每篇按标题切分、向量化入库</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="screenshots/05-evidence.png" alt="证据页">
+      <figcaption>证据页：seekdb 查询留痕与检索融合留痕逐条可查（SQL 通道、耗时、行数）</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>seekdb 与 PowerContext 的分工</h2>
+    <table>
+      <tr><th>组件</th><th>在项目中的实际作用（非安装点缀）</th><th>如何核对</th></tr>
+      <tr><td><b>seekdb</b><br>数据与检索</td><td>全部资料存于 <span class="inline-code">sm_chunks</span> 单表（向量+全文+结构化三维度）；每次提问并行执行三条 SQL：纯向量 <span class="inline-code">ORDER BY l2_distance(...) APPROXIMATE</span>、单语句混合 <span class="inline-code">WHERE MATCH(content) AGAINST(?) ORDER BY l2_distance(...) APPROXIMATE</span>、结构化 <span class="inline-code">ORDER BY created_at DESC</span>，RRF 融合后进回答</td><td>「证据」页 seekdb 查询留痕（sql_trace.jsonl）；引用的通道徽章</td></tr>
+      <tr><td><b>PowerContext</b><br>记忆与上下文</td><td>每工位一个 scope；每轮 LLM 提炼 0-2 条记忆 <span class="inline-code">POST /v1/memory/remember</span> 写入；下轮 <span class="inline-code">POST /v1/memory/search</span> 召回注入回答与欢迎横幅；「记忆」页 <span class="inline-code">entries/list</span> 全量可视化</td><td>记忆读写留痕（memory_trace.jsonl，含 entry_id）；跨会话样例（日期只在记忆里，资料里没有）</td></tr>
+    </table>
+    <p class="mods" style="margin-top:12px">为什么两个都要：资料是"可检索的公共事实"（要出处/排序/过滤），记忆是"跟人走的上下文"（要隔离/版本/想起）。用 seekdb 手搓记忆等于重写记忆服务，用 PowerContext 存资料则丢掉混合检索——各在其位。</p>
+  </section>
+
+  <section>
+    <h2>验证结果</h2>
+    <ul>
+      <li><span class="inline-code">scripts/verify_demo.py</span> 一键复跑 <b>7/7 通过</b>：健康检查、检索命中正确文档、单语句混合检索 SQL 生效、记忆写入、跨会话记忆召回并用于回答、工位隔离、SQL 留痕。</li>
+      <li>无 LLM 降级模式实测：检索与引用正常，seekdb/PowerContext 功能不受影响（evidence/degraded_mode_test.txt）。</li>
+      <li>多工位隔离实测：不同 scope 记忆互不可见（evidence/scope_isolation_test.txt）。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>代码与复现</h2>
+    <p>完整源码（应用 + 运行手册 + 验证样例 + 实测留档）在大赛仓库 <span class="inline-code">powercontext</span> 的 <span class="inline-code">2026-competition-ecosystem</span> 基线上：<b>qoder/ 目录，分支 crq-ecosystem</b>。</p>
+    <pre>git clone https://github.com/yanayana-1-dev/powercontext.git
+cd powercontext &amp;&amp; git checkout crq-ecosystem
+# 部署 seekdb / PowerContext / 嵌入服务 → 见 qoder/docs/RUNBOOK.md（约 30-60 分钟）
+cd qoder/app &amp;&amp; pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 9100
+python ../scripts/seed.py          # 导入种子资料
+python ../scripts/verify_demo.py   # 四步验证一键复跑</pre>
+    <p style="margin-top:14px">
+      <a class="btn" href="https://github.com/yanayana-1-dev/powercontext/tree/crq-ecosystem/qoder">代码仓库</a>
+      <a class="btn ghost" href="https://github.com/yanayana-1-dev/powercontext/blob/crq-ecosystem/qoder/docs/RUNBOOK.md">运行说明</a>
+      <a class="btn ghost" href="https://github.com/yanayana-1-dev/powercontext/blob/crq-ecosystem/qoder/docs/VERIFY.md">验证样例</a>
+      <a class="btn ghost" href="https://github.com/yanayana-1-dev/powercontext/blob/crq-ecosystem/qoder/docs/DESIGN.md">设计说明</a>
+    </p>
+  </section>
+</main>
+<div class="footer">SeekMem · 追忆工作台 — 2026 OceanBase 大赛生态赛道 Qoder 题 · 本站由 Qoder Sites 发布</div>
+</body>
+</html>

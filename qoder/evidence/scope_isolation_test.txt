@@ -1,0 +1,5 @@
+== 多工位（scope）隔离测试（SeekMem :9100）==
+工位A 验证员小赛: scope=scp_6p6v58ddmzp812gxq2msa9s9fw  记忆 8 条
+  A 的记忆示例: 验证员小赛记住星桥服务下周三要做压测第二轮，目标是将P99延迟降到300ms以内
+工位B 新来的同事: scope=scp_3fq96kw4kwdcmch5b14dms09q5  记忆 0 条（新工位为 0）
+结论：两个 scope 不同，记忆互相隔离，A 的 8 条记忆对 B 不可见。
