@@ -1,7 +1,8 @@
 """SeekMem · 追忆工作台 —— FastAPI 入口。
 
-启动：cd app && uvicorn main:app --host 0.0.0.0 --port 9100
-首次启动自动建库建表（seekdb 服务端模式，MySQL 协议）。
+启动：cd app && uvicorn main:app --host 0.0.0.0 --port 9100   （或 python main.py）
+首次启动自动建库建表；seekdb/PowerContext/嵌入/LLM 任一服务缺失时应用仍可启动
+（降级模式，/api/health 显示各组件状态），完整功能按 docs/RUNBOOK.md 部署后自动恢复。
 """
 import logging
 from pathlib import Path
@@ -23,7 +24,14 @@ app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 @app.on_event("startup")
 def _startup() -> None:
-    schema.ensure_schema()
+    try:
+        schema.ensure_schema()
+    except Exception as exc:  # noqa: BLE001
+        # 降级启动：seekdb 未部署时应用仍正常起来（健康页显示该组件 fail），
+        # 按 docs/RUNBOOK.md 部署 seekdb 后重启即恢复完整功能。
+        logging.getLogger("seekmem.startup").warning(
+            "seekdb 未就绪，应用以降级模式启动（%s）", exc
+        )
 
 
 # ---------- 基础 ----------
@@ -134,3 +142,9 @@ def api_traces(limit: int = Query(default=30, ge=1, le=200)):
         "memory": traces.tail("memory_trace.jsonl", limit),
         "chat": traces.tail("chat_trace.jsonl", limit),
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(config._env("PORT", "9100")))
